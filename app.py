@@ -307,33 +307,38 @@ with tabs[1]:
     if 'df_raw' not in locals():
         st.warning("Upload a dataset first in the Data Upload tab.")
     else:
+        # --- Clean dataset ---
         df = load_and_basic_clean(df_raw)
-        st.subheader("After basic cleaning (head):")
-        st.dataframe(df.head(10))
 
-        # Basic stats
+        # 🔍 Show raw vs median-filled data
+        st.subheader("🧾 Raw vs Cleaned Data (Preview)")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Raw Data (Original)**")
+            st.dataframe(df_raw.head(10), use_container_width=True)
+
+        # ✅ Fill missing & zero values with median
+        df_median = df.copy()
+        numeric_cols = ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']
+        for col in numeric_cols:
+            if col in df_median.columns:
+                median_val = df_median[col].replace(0, np.nan).median()
+                df_median[col] = df_median[col].replace(0, np.nan).fillna(median_val)
+
+        with col2:
+            st.markdown("**Median-Filled Data (Processed)**")
+            st.dataframe(df_median.head(10), use_container_width=True)
+
+        st.info("👉 Missing and zero values were replaced with each column’s median.")
+
+        # Replace df with median-filled version for all later analyses
+        df = df_median
+
+        # Continue with your stats & charts below 👇
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-        # Water Level distribution (Plotly)
-        if 'Water Level' in df.columns:
-            st.subheader("Water Level distribution")
-            fig = px.histogram(
-                df,
-                x='Water Level',
-                nbins=30,
-                marginal="box",
-                title="Distribution of Cleaned Water Level"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-                and filling missing values with the median.  
-                The boxplot margin highlights potential outliers.  
-                Use this to detect skew and extreme flood events.
-                """)
 
         # ------------------------------
         # Monthly flood probability (fixed)
@@ -840,3 +845,4 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
