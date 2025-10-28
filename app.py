@@ -1,7 +1,7 @@
-# app.py
+  # app.py
 # Flood Pattern Data Mining & Forecasting - Streamlit Port of floodpatternv2.ipynb
 # Interactive Plotly charts + automatic explanations below each output
-# Author: ChatGPT (converted for Streamlit) — revised to auto-fill median for zeros/NaNs and show raw vs processed
+# Author: ChatGPT (converted for Streamlit)
 # Usage: streamlit run app.py
 
 import streamlit as st
@@ -20,14 +20,10 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore")
-
-# ================== LOAD LOCAL CSS (optional) ==================
+# ================== LOAD LOCAL CSS ==================
 def local_css(file_name):
-    try:
-        with open(file_name) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except Exception:
-        pass
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 local_css("style.css")
 # ====================================================
@@ -67,10 +63,12 @@ def load_and_basic_clean(df):
     # Work on a copy
     df = df.copy()
 
-    # Normalize whitespace in column names
+    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
     df.columns = [c.strip() for c in df.columns]
 
-    # Detect candidate columns (canonical mapping)
+    # Create canonical column names (if any variant exists)
+    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
+    # The rest of your app expects those canonical names.
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -116,18 +114,25 @@ def load_and_basic_clean(df):
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean water level if present (do not auto-fill here; we'll do uniform median fill later)
+    # Clean water level if present
     if 'Water Level' in df.columns:
         df['Water Level'] = clean_water_level(df['Water Level'])
+        # If too many missing, leave them but otherwise impute with median
+        if df['Water Level'].notna().sum() > 0:
+            median_wl = df['Water Level'].median()
+            df['Water Level'] = df['Water Level'].fillna(median_wl)
 
     # Families affected
     if 'No. of Families affected' in df.columns:
         df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
+        if df['No. of Families affected'].notna().sum() > 0:
+            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
 
     # Damage columns
     for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
             df[col] = clean_damage_col(df[col])
+            df[col] = df[col].fillna(0)
 
     # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
@@ -135,27 +140,40 @@ def load_and_basic_clean(df):
             df[c] = pd.to_numeric(df[c], errors='coerce')
 
     # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
+    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
+            # attempt forward then backward fill but only for short gaps
             df[c] = df[c].ffill().bfill()
 
     return df
 
 def create_datetime_index(df):
+    """
+    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
+    Returns a dataframe with a Date index if possible; otherwise returns the original df.
+    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
+    and avoids integer-casting errors by using pd.to_datetime with dict input.
+    """
     tmp = df.copy()
 
+    # If Month exists but Month_Num doesn't, try mapping (safe)
     if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
 
+    # Ensure we have at least Year and something for month/day
     if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
+        # Not enough parts to build a date index
         return df
 
+    # Coerce to numeric, leaving invalid as NaN
     tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
     tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
     tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
 
+    # Drop rows where essential parts are missing - can't build a date
     before = len(tmp)
     tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
     dropped = before - len(tmp)
@@ -165,12 +183,16 @@ def create_datetime_index(df):
     if tmp.empty:
         return df
 
+    # Convert to integer where safe
+    # (they're floats because of NaNs; cast after dropping NaNs)
     tmp['Year'] = tmp['Year'].astype(int)
     tmp['Month_Num'] = tmp['Month_Num'].astype(int)
     tmp['Day'] = tmp['Day'].astype(int)
 
+    # Now build Date column using dict -> safe assembly
     tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
 
+    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
     before2 = len(tmp)
     tmp = tmp.dropna(subset=['Date']).copy()
     dropped2 = before2 - len(tmp)
@@ -198,50 +220,11 @@ def categorize_severity(w):
         return 'High'
 
 # ------------------------------
-# New: median-fill zeros & NaNs automatically
-# ------------------------------
-def median_fill_zeros_and_nans(df, exclude_columns=None, verbose=False):
-    """
-    Fill zeros and NaNs in numeric columns with the median calculated from non-zero values.
-    exclude_columns: list of column names NOT to modify (e.g., Year, Month_Num, Day).
-    Returns processed df and a small dataframe with the medians used.
-    """
-    if exclude_columns is None:
-        exclude_columns = ['Year', 'Month_Num', 'Day']
-
-    df = df.copy()
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    cols_to_fill = [c for c in numeric_cols if c not in exclude_columns]
-
-    medians = {}
-    for c in cols_to_fill:
-        series = df[c]
-        # compute median ignoring zeros
-        nonzero = series.replace(0, np.nan).dropna()
-        if len(nonzero) > 0:
-            med = nonzero.median()
-        else:
-            # fallback to median including zeros if all zeros or all NaN
-            med = series.dropna().median() if series.dropna().size > 0 else 0
-        if pd.isna(med):
-            med = 0.0
-        medians[c] = med
-        # Fill zeros and NaNs
-        df[c] = series.replace(0, np.nan).fillna(med)
-
-        if verbose:
-            orig_count_zero = (series == 0).sum()
-            orig_count_na = series.isna().sum()
-            st.write(f"Column `{c}`: median used = {med} | zeros replaced = {orig_count_zero} | NaNs filled = {orig_count_na}")
-
-    med_df = pd.DataFrame.from_dict(medians, orient='index', columns=['median_used']).reset_index().rename(columns={'index':'column'})
-    return df, med_df
-
-# ------------------------------
 # UI Layout
 # ------------------------------
 st.title("🌊 Flood Pattern Data Mining & Forecasting 🌊")
-st.markdown("Upload your CSV (like `FloodDataMDRRMO.csv`) and explore the analyses. This app runs cleaning, EDA, KMeans clustering, RandomForest prediction, and SARIMA forecasting. Explanations appear under each output.")
+st.markdown("Upload your CSV (like `FloodDataMDRRMO.csv`) and explore the analyses. "
+            "This app runs cleaning, EDA, KMeans clustering, RandomForest prediction, and SARIMA forecasting. Explanations appear under each output.")
 
 # Sidebar: file upload & options
 st.sidebar.header("Upload & Options")
@@ -249,54 +232,9 @@ uploaded_file = st.sidebar.file_uploader("Upload flood CSV", type=['csv','txt','
 use_example = st.sidebar.checkbox("Use example dataset (if no upload)", value=False)
 plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index=0)
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
-# toggle to show processed or raw by default (we auto-process regardless)
-show_processed_default = st.sidebar.checkbox("Show processed dataset by default (auto-fill medians)", value=True)
 
 # Tabs (main)
 tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Tutorial"])
-
-# ------------------------------
-# Load data - keep in session_state so other tabs can access
-# ------------------------------
-if 'df_raw' not in st.session_state:
-    st.session_state['df_raw'] = None
-if 'df_clean' not in st.session_state:
-    st.session_state['df_clean'] = None
-if 'df_processed' not in st.session_state:
-    st.session_state['df_processed'] = None
-if 'medians_df' not in st.session_state:
-    st.session_state['medians_df'] = None
-
-# Load file or example
-if uploaded_file is not None:
-    try:
-        file_name = uploaded_file.name
-        if file_name.endswith('.xlsx'):
-            df_raw_local = pd.read_excel(uploaded_file)
-        else:
-            df_raw_local = pd.read_csv(uploaded_file)
-        st.session_state['df_raw'] = df_raw_local
-    except Exception as e:
-        st.error(f"❌ Failed to read file: {e}")
-        st.stop()
-elif use_example and st.session_state['df_raw'] is None:
-    # Example dataset for demonstration
-    df_raw_local = pd.DataFrame({
-        'Year': [2018, 2018, 2019, 2019, 2020, 2020],
-        'Month': ['JANUARY', 'FEBRUARY', 'DECEMBER', 'FEBRUARY', 'MAY', 'NOVEMBER'],
-        'Day': [10, 5, 12, 20, 1, 15],
-        'Municipality': ['Bunawan'] * 6,
-        'Barangay': ['Poblacion', 'Imelda', 'Poblacion', 'Mambalili', 'Bunawan Brook', 'Poblacion'],
-        'Flood Cause': ['LPA', 'LPA', 'Easterlies', 'AURING', 'Shearline', 'LPA'],
-        'Water Level': ['5 ft.', '8 ft', '12ft', '20ft', 'nan', '3 ft'],
-        'No. of Families affected': [10, 20, 50, 200, 0, 5],
-        'Damage Infrastructure': ['0', '0', '1,000', '5,000', '0', '0'],
-        'Damage Agriculture': ['0', '0', '422.510.5', '10,000', '0', '0']
-    })
-    st.session_state['df_raw'] = df_raw_local
-
-# Use loaded
-df_loaded = st.session_state.get('df_raw', None)
 
 # ------------------------------
 # 🌊 Data Upload Tab
@@ -304,19 +242,60 @@ df_loaded = st.session_state.get('df_raw', None)
 with tabs[0]:
     st.markdown("<h2 class='main-title'>📂 Data Upload & Overview</h2>", unsafe_allow_html=True)
 
-    if df_loaded is None:
+    # --- 1️⃣ Upload Instructions ---
+    if uploaded_file is None and not use_example:
         st.info("📤 Please upload a CSV or Excel file to begin, or toggle **'Use example dataset'** in the sidebar.")
     else:
-        st.success(f"✅ Loaded dataset — **{df_loaded.shape[0]:,} rows**, **{df_loaded.shape[1]} columns**.")
+        # --- 2️⃣ Load Uploaded or Example Data ---
+        if uploaded_file is not None:
+            try:
+                file_name = uploaded_file.name
+                if file_name.endswith('.xlsx'):
+                    df_raw = pd.read_excel(uploaded_file)
+                else:
+                    df_raw = pd.read_csv(uploaded_file)
 
-        st.markdown("### 🧾 Raw Data Preview (first 20 rows)")
-        with st.expander("🔍 View Raw Data (First 20 Rows)", expanded=False):
-            st.dataframe(df_loaded.head(20), use_container_width=True)
+                st.success(f"✅ Loaded **{file_name}** — **{df_raw.shape[0]:,} rows**, **{df_raw.shape[1]} columns**.")
+            except Exception as e:
+                st.error(f"❌ Failed to read file: {e}")
+                st.stop()
+        else:
+            # Example dataset for demonstration
+            st.warning("⚠️ Using a **synthetic example dataset** (for testing only). Upload your real file for accurate results.")
+            df_raw = pd.DataFrame({
+                'Year': [2018, 2018, 2019, 2019, 2020, 2020],
+                'Month': ['JANUARY', 'FEBRUARY', 'DECEMBER', 'FEBRUARY', 'MAY', 'NOVEMBER'],
+                'Day': [10, 5, 12, 20, 1, 15],
+                'Municipality': ['Bunawan'] * 6,
+                'Barangay': ['Poblacion', 'Imelda', 'Poblacion', 'Mambalili', 'Bunawan Brook', 'Poblacion'],
+                'Flood Cause': ['LPA', 'LPA', 'Easterlies', 'AURING', 'Shearline', 'LPA'],
+                'Water Level': ['5 ft.', '8 ft', '12ft', '20ft', 'nan', '3 ft'],
+                'No. of Families affected': [10, 20, 50, 200, 0, 5],
+                'Damage Infrastructure': ['0', '0', '1,000', '5,000', '0', '0'],
+                'Damage Agriculture': ['0', '0', '422.510.5', '10,000', '0', '0']
+            })
 
+            # Example data preview
+            st.markdown("### 🧾 Example Data Preview")
+            st.dataframe(df_raw.head(), use_container_width=True)
+
+        # --- 3️⃣ Data Summary ---
+        st.markdown("### 📊 Dataset Overview")
+        info_col1, info_col2 = st.columns(2)
+        with info_col1:
+            st.metric("📅 Total Rows", f"{df_raw.shape[0]:,}")
+        with info_col2:
+            st.metric("📈 Total Columns", f"{df_raw.shape[1]}")
+
+        # --- 4️⃣ Raw Data Preview (Expandable) ---
+        with st.expander("🔍 View Raw Data (First 20 Rows)"):
+            st.dataframe(df_raw.head(20), use_container_width=True)
+
+        # --- 5️⃣ Column List ---
         st.markdown("### 🧩 Column Names")
         col_df = pd.DataFrame({
-            "Column Name": df_loaded.columns,
-            "Example Value": [str(df_loaded[col].iloc[0]) if not df_loaded[col].empty else "" for col in df_loaded.columns]
+            "Column Name": df_raw.columns,
+            "Example Value": [str(df_raw[col].iloc[0]) if not df_raw[col].empty else "" for col in df_raw.columns]
         })
         st.table(col_df)
 
@@ -325,68 +304,38 @@ with tabs[0]:
 # ------------------------------
 with tabs[1]:
     st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
-
-    if df_loaded is None:
+    if 'df_raw' not in locals():
         st.warning("Upload a dataset first in the Data Upload tab.")
     else:
-        # 1) Basic cleaning -> canonical columns
-        df_clean_local = load_and_basic_clean(df_loaded)
-        st.session_state['df_clean'] = df_clean_local
+        df = load_and_basic_clean(df_raw)
+        st.subheader("After basic cleaning (head):")
+        st.dataframe(df.head(10))
 
-        # 2) Automatic median fill for zeros & NaNs (excluding date parts)
-        df_processed_local, med_df_local = median_fill_zeros_and_nans(df_clean_local, exclude_columns=['Year','Month_Num','Day'])
-        st.session_state['df_processed'] = df_processed_local
-        st.session_state['medians_df'] = med_df_local
+        # Basic stats
+        st.subheader("Summary statistics (numerical):")
+        st.write(df.select_dtypes(include=[np.number]).describe())
 
-        st.subheader("After basic cleaning (head) — processed automatically with median fill")
-        # Let user choose whether to view raw vs processed default based on sidebar toggle
-        show_processed = show_processed_default
-        if st.checkbox("Toggle: show RAW data instead of processed (expands below)", value=False):
-            show_processed = False
-
-        if show_processed:
-            st.caption("This is the **processed** dataset (zeros/NaNs in numeric columns replaced by median).")
-            st.dataframe(df_processed_local.head(10))
-        else:
-            st.caption("This is the **raw cleaned** dataset (before median fill).")
-            st.dataframe(df_clean_local.head(10))
-
-        # Show medians used and a before/after preview side-by-side
-        st.subheader("Median values used for filling (numeric columns)")
-        st.dataframe(med_df_local, use_container_width=True)
-
-        st.subheader("Compare Raw vs Processed (first 20 rows)")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Raw cleaned (first 20 rows)**")
-            st.dataframe(df_clean_local.head(20), use_container_width=True)
-        with col2:
-            st.markdown("**Processed (median-filled) (first 20 rows)**")
-            st.dataframe(df_processed_local.head(20), use_container_width=True)
-
-        # Basic stats (processed)
-        st.subheader("Summary statistics (numerical) — processed dataset")
-        st.write(df_processed_local.select_dtypes(include=[np.number]).describe())
-
-        # Water Level distribution (Plotly) using processed
-        if 'Water Level' in df_processed_local.columns:
-            st.subheader("Water Level distribution (processed)")
+        # Water Level distribution (Plotly)
+        if 'Water Level' in df.columns:
+            st.subheader("Water Level distribution")
             fig = px.histogram(
-                df_processed_local,
+                df,
                 x='Water Level',
                 nbins=30,
                 marginal="box",
-                title="Distribution of Processed Water Level"
+                title="Distribution of Cleaned Water Level"
             )
             st.plotly_chart(fig, use_container_width=True)
             if show_explanations:
                 st.markdown("""
                 **Explanation:**  
-                This histogram shows `Water Level` distribution after cleaning and median-filling zeros/NaNs.
-                The boxplot margin highlights potential outliers.
+                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
+                and filling missing values with the median.  
+                The boxplot margin highlights potential outliers.  
+                Use this to detect skew and extreme flood events.
                 """)
 
-          # ------------------------------
+        # ------------------------------
         # Monthly flood probability (fixed)
         # ------------------------------
         if 'Month' in df.columns:
