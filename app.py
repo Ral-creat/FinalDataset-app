@@ -557,22 +557,32 @@ with tabs[3]:
             st.markdown("**Explanation:** Features with higher importance contributed more to model decisions. `Water Level` often dominates.")
 
         # Allow user to show predicted probabilities per month (as earlier notebook did)
-        if st.button("Show predicted flood probability per month (using median inputs)"):
-            median_vals = X_basic.median()
-            months = sorted(df['Month'].dropna().unique())
-            pred_rows = []
-            for m in months:
-                row = median_vals.copy()
-                # set the month dummy for this month to 1 and others to 0 if present
-                md = [c for c in X_basic.columns if c.startswith('Month_')]
-                for col in md:
-                    row[col] = 1 if col == f"Month_{m}" else 0
-                pred_rows.append(row.values)
-            Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-            probs = model.predict_proba(Xpred)
-if probs.shape[1] == 1:
-    probs = np.hstack([1 - probs, probs])
-probs = probs[:, 1]
+       if st.button("Show predicted flood probability per month (using median inputs)"):
+    median_vals = X_basic.median()
+    months = sorted(df['Month'].dropna().unique())
+    pred_rows = []
+    for m in months:
+        row = median_vals.copy()
+        # set the month dummy for this month to 1 and others to 0 if present
+        md = [c for c in X_basic.columns if c.startswith('Month_')]
+        for col in md:
+            row[col] = 1 if col == f"Month_{m}" else 0
+        pred_rows.append(row.values)
+    Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
+    
+    # --- SAFE PROBABILITY HANDLING ---
+    probs = model.predict_proba(Xpred)
+    if len(probs.shape) == 1 or probs.shape[1] == 1:
+        probs = np.vstack([1 - probs, probs]).T
+    probs = probs[:, 1]
+
+    prob_df = pd.DataFrame({'Month': months, 'flood_prob': probs}).sort_values('flood_prob', ascending=False)
+    
+    fig = px.bar(prob_df, x='Month', y='flood_prob', title="Predicted flood probability per month (median inputs)")
+    st.plotly_chart(fig, use_container_width=True)
+    
+    if show_explanations:
+        st.markdown("**Explanation:** This uses median numeric values and swaps month dummies to estimate flood likelihood per month. It's a model-based estimate, not a raw frequency.")
 
 # ------------------------------
 # Flood Severity Tab
@@ -835,6 +845,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
