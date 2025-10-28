@@ -556,9 +556,7 @@ with tabs[3]:
         if show_explanations:
             st.markdown("**Explanation:** Features with higher importance contributed more to model decisions. `Water Level` often dominates.")
 
-      # ------------------------------
-# Optional: show predicted probabilities per month
-# ------------------------------
+    # Allow user to show predicted probabilities per month (using median inputs)
 if st.button("Show predicted flood probability per month (using median inputs)"):
     median_vals = X_basic.median()
     months = sorted(df['Month'].dropna().unique())
@@ -571,18 +569,22 @@ if st.button("Show predicted flood probability per month (using median inputs)")
             row[col] = 1 if col == f"Month_{m}" else 0
         pred_rows.append(row.values)
     Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-
-    # --- SAFE PROBABILITY HANDLING ---
-    probs = model.predict_proba(Xpred)
-    if len(probs.shape) == 1 or probs.shape[1] == 1:
-        probs = np.vstack([1 - probs, probs]).T
-    probs = probs[:, 1]
-
+    
+    # Handle binary vs multi-class output safely
+    try:
+        probs = model.predict_proba(Xpred)
+        if probs.shape[1] == 1:
+            # Binary classifier returns single column sometimes
+            probs = np.hstack([1 - probs, probs])
+        probs = probs[:,1]  # probability of flood occurrence
+    except Exception as e:
+        st.error(f"Prediction failed: {e}")
+        probs = np.zeros(len(months))
+    
     prob_df = pd.DataFrame({'Month': months, 'flood_prob': probs}).sort_values('flood_prob', ascending=False)
-
     fig = px.bar(prob_df, x='Month', y='flood_prob', title="Predicted flood probability per month (median inputs)")
     st.plotly_chart(fig, use_container_width=True)
-
+    
     if show_explanations:
         st.markdown("**Explanation:** This uses median numeric values and swaps month dummies to estimate flood likelihood per month. It's a model-based estimate, not a raw frequency.")
 
@@ -847,6 +849,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
