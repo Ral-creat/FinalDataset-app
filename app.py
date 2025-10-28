@@ -311,6 +311,22 @@ with tabs[1]:
         st.subheader("After basic cleaning (head):")
         st.dataframe(df.head(10))
 
+        # ------------------------------
+        # Show raw data after zero/median fill
+        # ------------------------------
+        st.subheader("🔹 Raw Data after Filling Missing / Zero Values")
+        with st.expander("View full dataset (first 50 rows) with zeros/medians filled"):
+            st.dataframe(df.fillna(0).head(50), use_container_width=True)
+
+        # Optional: highlight filled cells (yellow)
+        def highlight_filled(val):
+            if pd.isna(val):
+                return 'background-color: yellow'
+            return ''
+
+        with st.expander("View dataset with filled cells highlighted"):
+            st.dataframe(df.style.applymap(highlight_filled).head(50), use_container_width=True)
+
         # Basic stats
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
@@ -840,3 +856,4 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
