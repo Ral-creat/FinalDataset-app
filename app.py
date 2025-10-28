@@ -450,7 +450,7 @@ with tabs[1]:
 # ------------------------------
 with tabs[2]:
     st.header("Clustering (KMeans)")
-    df = st.session_state.get('df_processed', None)
+    df = st.session_state.get('df_filled', None)
     if df is None:
         st.warning("Do data cleaning first.")
     else:
@@ -488,7 +488,7 @@ with tabs[2]:
 with tabs[3]:
     st.header("Flood occurrence prediction — RandomForest")
 
-    df = st.session_state.get('df_processed', None)
+    df = st.session_state.get('df_filled', None)
     if df is None:
         st.warning("Do data cleaning first.")
     else:
@@ -566,7 +566,7 @@ with tabs[3]:
 with tabs[4]:
     st.header("🌊 Flood Severity Classification")
 
-    df = st.session_state.get('df_processed', None)
+    df = st.session_state.get('df_filled', None)
     if df is None:
         st.warning("⚠️ Please perform data cleaning first.")
     else:
@@ -624,7 +624,7 @@ with tabs[4]:
 # ------------------------------
 with tabs[5]:
     st.header("Time Series forecasting (SARIMA)")
-    df = st.session_state.get('df_processed', None)
+    df = st.session_state.get('df_filled', None)
     if df is None:
         st.warning("Do data cleaning first.")
     else:
@@ -754,3 +754,4 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:\n\n- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
