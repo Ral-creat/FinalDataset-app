@@ -114,25 +114,25 @@ def load_and_basic_clean(df):
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean water level if present
-    if 'Water Level' in df.columns:
-        df['Water Level'] = clean_water_level(df['Water Level'])
-        # If too many missing, leave them but otherwise impute with median
-        if df['Water Level'].notna().sum() > 0:
-            median_wl = df['Water Level'].median()
-            df['Water Level'] = df['Water Level'].fillna(median_wl)
+   # Clean Water Level
+if 'Water Level' in df.columns:
+    df['Water Level'] = clean_water_level(df['Water Level'])
+    if df['Water Level'].notna().sum() > 0:
+        df['Water Level'] = fill_zero_with_median(df['Water Level'])
 
-    # Families affected
-    if 'No. of Families affected' in df.columns:
-        df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
-        if df['No. of Families affected'].notna().sum() > 0:
-            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
+# No. of Families affected
+if 'No. of Families affected' in df.columns:
+    df['No. of Families affected'] = pd.to_numeric(
+        df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
+    if df['No. of Families affected'].notna().sum() > 0:
+        df['No. of Families affected'] = fill_zero_with_median(df['No. of Families affected'])
 
-    # Damage columns
-    for col in ['Damage Infrastructure', 'Damage Agriculture']:
-        if col in df.columns:
-            df[col] = clean_damage_col(df[col])
-            df[col] = df[col].fillna(0)
+# Damage columns
+for col in ['Damage Infrastructure', 'Damage Agriculture']:
+    if col in df.columns:
+        df[col] = clean_damage_col(df[col])
+        if df[col].notna().sum() > 0:
+            df[col] = fill_zero_with_median(df[col])
 
     # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
@@ -840,3 +840,4 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
