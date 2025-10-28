@@ -658,22 +658,53 @@ with tabs[5]:
                 if show_explanations:
                     st.markdown("**Explanation:** After first differencing we remove trends; re-check ADF on differenced series before modelling.")
 
-            # Show ACF/PACF plots
-            st.subheader("ACF & PACF (help pick p/q values)")
-            fig_acf = plt.figure(figsize=(10,4))
-            try:
-                plot_acf(ts_filled.dropna(), lags=40, ax=fig_acf.gca())
-                st.pyplot(fig_acf)
-            except Exception as e:
-                st.error(f"ACF plot failed: {e}")
-            fig_pacf = plt.figure(figsize=(10,4))
-            try:
-                plot_pacf(ts_filled.dropna(), lags=40, ax=fig_pacf.gca())
-                st.pyplot(fig_pacf)
-            except Exception as e:
-                st.error(f"PACF plot failed: {e}")
-            if show_explanations:
-                st.markdown("**Explanation:** PACF suggests AR order (p), ACF suggests MA order (q). Seasonal spikes indicate seasonal order (P,Q,s).")
+           # Show ACF/PACF plots as bar graphs
+st.subheader("ACF & PACF (Bar Graphs for p/q selection)")
+
+from statsmodels.tsa.stattools import acf, pacf
+import plotly.graph_objects as go
+
+lags = 40
+ts_series = ts_filled.dropna()
+
+# Compute ACF and PACF values
+acf_vals = acf(ts_series, nlags=lags)
+pacf_vals = pacf(ts_series, nlags=lags)
+
+# --- ACF Bar Plot ---
+fig_acf = go.Figure()
+fig_acf.add_trace(go.Bar(
+    x=list(range(lags+1)),
+    y=acf_vals,
+    name="ACF",
+    marker_color='blue'
+))
+fig_acf.update_layout(
+    title="ACF (Bar Graph)",
+    xaxis_title="Lag",
+    yaxis_title="ACF",
+    yaxis=dict(range=[-1, 1])
+)
+st.plotly_chart(fig_acf, use_container_width=True)
+
+# --- PACF Bar Plot ---
+fig_pacf = go.Figure()
+fig_pacf.add_trace(go.Bar(
+    x=list(range(lags+1)),
+    y=pacf_vals,
+    name="PACF",
+    marker_color='orange'
+))
+fig_pacf.update_layout(
+    title="PACF (Bar Graph)",
+    xaxis_title="Lag",
+    yaxis_title="PACF",
+    yaxis=dict(range=[-1, 1])
+)
+st.plotly_chart(fig_pacf, use_container_width=True)
+
+if show_explanations:
+    st.markdown("**Explanation:** PACF suggests AR order (p), ACF suggests MA order (q). Bar heights show correlation at each lag. Seasonal spikes indicate seasonal order (P,Q,s).")
 
             # ------------------------------
             # Fit a sample SARIMA (table format output)
@@ -794,5 +825,6 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
