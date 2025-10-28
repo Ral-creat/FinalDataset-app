@@ -60,15 +60,19 @@ def _find_col(df, candidate_lower):
     return None
 
 def load_and_basic_clean(df):
-    # Work on a copy
-    df = df.copy()
+    def fill_zero_with_median(series):
+    """Replace zeros and NaNs with median of non-zero values."""
+    series = pd.to_numeric(series, errors='coerce')
+    non_zero = series[series != 0]
+    median_val = non_zero.median() if len(non_zero) > 0 else 0
+    # Replace 0 and NaN with median
+    return series.replace(0, median_val).fillna(median_val)
 
-    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
+def load_and_basic_clean(df):
+    df = df.copy()
     df.columns = [c.strip() for c in df.columns]
 
-    # Create canonical column names (if any variant exists)
-    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
-    # The rest of your app expects those canonical names.
+    # Canonical column mapping
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -82,71 +86,66 @@ def load_and_basic_clean(df):
         'barangay': _find_col(df, 'barangay')
     }
 
-    # Copy found columns into canonical names (only if found)
-    if col_map['year'] is not None:
-        df['Year'] = df[col_map['year']]
-    if col_map['month'] is not None:
-        df['Month'] = df[col_map['month']].astype(str).str.strip()
-    if col_map['month_num'] is not None:
-        df['Month_Num'] = df[col_map['month_num']]
-    if col_map['day'] is not None:
-        df['Day'] = df[col_map['day']]
-    if col_map['water_level'] is not None:
-        df['Water Level'] = df[col_map['water_level']]
-    if col_map['families'] is not None:
-        df['No. of Families affected'] = df[col_map['families']]
-    if col_map['damage_infra'] is not None:
-        df['Damage Infrastructure'] = df[col_map['damage_infra']]
-    if col_map['damage_agri'] is not None:
-        df['Damage Agriculture'] = df[col_map['damage_agri']]
-    if col_map['municipality'] is not None:
-        df['Municipality'] = df[col_map['municipality']]
-    if col_map['barangay'] is not None:
-        df['Barangay'] = df[col_map['barangay']]
+    # Copy found columns into canonical names
+    for key, col in col_map.items():
+        if col is not None:
+            if key == 'year':
+                df['Year'] = df[col]
+            elif key == 'month':
+                df['Month'] = df[col].astype(str).str.strip()
+            elif key == 'month_num':
+                df['Month_Num'] = df[col]
+            elif key == 'day':
+                df['Day'] = df[col]
+            elif key == 'water_level':
+                df['Water Level'] = df[col]
+            elif key == 'families':
+                df['No. of Families affected'] = df[col]
+            elif key == 'damage_infra':
+                df['Damage Infrastructure'] = df[col]
+            elif key == 'damage_agri':
+                df['Damage Agriculture'] = df[col]
+            elif key == 'municipality':
+                df['Municipality'] = df[col]
+            elif key == 'barangay':
+                df['Barangay'] = df[col]
 
-    # Standardize Month to uppercase names if exists
+    # Standardize Month to uppercase
     if 'Month' in df.columns:
-        df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
+        df['Month'] = df['Month'].astype(str).str.upper().replace({'NAN': pd.NA})
 
-    # If Month_Num wasn't provided but Month names are, map names to numbers
+    # Map Month names to numbers if missing
+    month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                 'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
-        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
-                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-   # Clean Water Level
-if 'Water Level' in df.columns:
-    df['Water Level'] = clean_water_level(df['Water Level'])
-    if df['Water Level'].notna().sum() > 0:
+    # ------------------ CLEAN NUMERIC COLUMNS ------------------
+    # Water Level
+    if 'Water Level' in df.columns:
+        df['Water Level'] = clean_water_level(df['Water Level'])
         df['Water Level'] = fill_zero_with_median(df['Water Level'])
 
-# No. of Families affected
-if 'No. of Families affected' in df.columns:
-    df['No. of Families affected'] = pd.to_numeric(
-        df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
-    if df['No. of Families affected'].notna().sum() > 0:
+    # No. of Families affected
+    if 'No. of Families affected' in df.columns:
+        df['No. of Families affected'] = pd.to_numeric(
+            df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce'
+        )
         df['No. of Families affected'] = fill_zero_with_median(df['No. of Families affected'])
 
-# Damage columns
-for col in ['Damage Infrastructure', 'Damage Agriculture']:
-    if col in df.columns:
-        df[col] = clean_damage_col(df[col])
-        if df[col].notna().sum() > 0:
+    # Damage columns
+    for col in ['Damage Infrastructure', 'Damage Agriculture']:
+        if col in df.columns:
+            df[col] = clean_damage_col(df[col])
             df[col] = fill_zero_with_median(df[col])
 
-    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
+    # Ensure Year/Month_Num/Day are numeric
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors='coerce')
-
-    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
-    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
-    for c in ['Year','Month_Num','Day']:
-        if c in df.columns:
-            # attempt forward then backward fill but only for short gaps
-            df[c] = df[c].ffill().bfill()
+            df[c] = pd.to_numeric(df[c], errors='coerce').ffill().bfill()
 
     return df
+
 
 def create_datetime_index(df):
     """
@@ -840,4 +839,5 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
