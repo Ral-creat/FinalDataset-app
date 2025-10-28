@@ -300,44 +300,46 @@ with tabs[0]:
         st.table(col_df)
 
 # ------------------------------
-# Cleaning & EDA Tab
+# Cleaning & EDA
 # ------------------------------
 with tabs[1]:
-    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
-    if 'df_raw' not in locals():
-        st.warning("Upload a dataset first in the Data Upload tab.")
+    st.header("🧹 Data Cleaning & EDA")
+    df_raw = st.session_state.get('df_raw', None)
+    if df_raw is None:
+        st.warning("Please upload a dataset first.")
     else:
-        # --- Clean dataset ---
-        df = load_and_basic_clean(df_raw)
+        df = df_raw.copy()
 
-        # 🔍 Show raw vs median-filled data
-        st.subheader("🧾 Raw vs Cleaned Data (Preview)")
-        col1, col2 = st.columns(2)
+        # Clean numeric columns
+        for col in ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']:
+            if col in df.columns:
+                df[col] = clean_numeric(df[col])
 
-        with col1:
-            st.markdown("**Raw Data (Original)**")
-            st.dataframe(df_raw.head(10), use_container_width=True)
+        # Fill median automatically
+        df_filled = fill_median(df)
 
-        # ✅ Fill missing & zero values with median
-        df_median = df.copy()
-        numeric_cols = ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']
-        for col in numeric_cols:
-            if col in df_median.columns:
-                median_val = df_median[col].replace(0, np.nan).median()
-                df_median[col] = df_median[col].replace(0, np.nan).fillna(median_val)
+        # Store the processed dataset for ML models
+        st.session_state['df_processed'] = df_filled
 
-        with col2:
-            st.markdown("**Median-Filled Data (Processed)**")
-            st.dataframe(df_median.head(10), use_container_width=True)
+        # Show Raw Data
+        st.subheader("📘 Raw Dataset (Before Median Filling)")
+        st.dataframe(df.head(20), use_container_width=True)
 
-        st.info("👉 Missing and zero values were replaced with each column’s median.")
+        # Show Median-Filled Data
+        st.subheader("📗 Processed Dataset (After Median Filling)")
+        st.dataframe(df_filled.head(20), use_container_width=True)
 
-        # Replace df with median-filled version for all later analyses
-        df = df_median
+        # Quick summary
+        st.markdown("### 🧾 Quick Summary (Numeric Columns)")
+        st.dataframe(df_filled.describe().round(2))
 
-        # Continue with your stats & charts below 👇
-        st.subheader("Summary statistics (numerical):")
-        st.write(df.select_dtypes(include=[np.number]).describe())
+        if show_explanations:
+            st.markdown("""
+            **Explanation:**  
+            - All numeric columns automatically cleaned and filled using median values.  
+            - Zero and missing values are replaced with the column's median.  
+            - This ensures models don’t fail due to missing or invalid data.
+            """)
 
 
         # ------------------------------
@@ -845,4 +847,5 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
