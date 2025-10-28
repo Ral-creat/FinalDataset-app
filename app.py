@@ -32,7 +32,44 @@ st.set_page_config(layout="wide", page_title="Flood Pattern Analysis Dashboard")
 
 # ------------------------------
 # Helpers: Cleaning & Preprocess
-# ------------------------------
+# ----------------------------
+def clean_numeric(series):
+    return (
+        series.astype(str)
+        .str.replace(",", "")
+        .str.replace("ft", "")
+        .str.replace("m", "")
+        .str.extract(r"(\d+\.?\d*)")[0]
+        .astype(float)
+    )
+
+def categorize_severity(water_level):
+    if water_level < 1:
+        return "Low"
+    elif 1 <= water_level < 3:
+        return "Medium"
+    else:
+        return "High"
+
+def create_datetime_index(df):
+    try:
+        df['Date'] = pd.to_datetime(df[['Year','Month','Day']])
+        df = df.set_index('Date')
+        return df
+    except Exception:
+        return df
+
+def fill_median(df):
+    df_filled = df.copy()
+    numeric_cols = df_filled.select_dtypes(include=[np.number]).columns
+    exclude = ['Year', 'Month', 'Day']
+    numeric_cols = [c for c in numeric_cols if c not in exclude]
+
+    for col in numeric_cols:
+        median_val = df_filled.loc[df_filled[col] != 0, col].median()
+        df_filled[col] = df_filled[col].replace(0, np.nan)
+        df_filled[col] = df_filled[col].fillna(median_val)
+    return df_filled
 def clean_water_level(series):
     s = series.astype(str).str.replace(' ft.', '', regex=False)\
                          .str.replace(' ft', '', regex=False)\
@@ -840,3 +877,4 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
