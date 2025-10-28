@@ -151,40 +151,51 @@ with tabs[0]:
         st.table(col_df)
 
 # ------------------------------
-# Cleaning & EDA Tab
+# Cleaning & EDA
 # ------------------------------
 with tabs[1]:
-    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
-    if 'df_raw' not in locals():
-        st.warning("Upload a dataset first in the Data Upload tab.")
+    st.header("🧹 Data Cleaning & EDA")
+    df_raw = st.session_state.get('df_raw', None)
+    if df_raw is None:
+        st.warning("Please upload a dataset first.")
     else:
-        df = load_and_basic_clean(df_raw)
-        st.subheader("After basic cleaning (head):")
-        st.dataframe(df.head(10))
+        df = df_raw.copy()
 
-        # Basic stats
-        st.subheader("Summary statistics (numerical):")
-        st.write(df.select_dtypes(include=[np.number]).describe())
+        for col in ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']:
+            if col in df.columns:
+                df[col] = clean_numeric(df[col])
 
-        # Water Level distribution (Plotly)
-        if 'Water Level' in df.columns:
-            st.subheader("Water Level distribution")
-            fig = px.histogram(
-                df,
-                x='Water Level',
-                nbins=30,
-                marginal="box",
-                title="Distribution of Cleaned Water Level"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-                and filling missing values with the median.  
-                The boxplot margin highlights potential outliers.  
-                Use this to detect skew and extreme flood events.
-                """)
+        df_filled = fill_median(df)
+        st.session_state['df_processed'] = df_filled
+
+        st.subheader("📘 Raw Dataset (Before Median Filling)")
+        st.dataframe(df.head(20), use_container_width=True)
+
+        st.subheader("📗 Processed Dataset (After Median Filling)")
+        st.dataframe(df_filled.head(20), use_container_width=True)
+
+        # ✅ Download as Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_filled.to_excel(writer, index=False, sheet_name='Processed_Data')
+        processed_excel = output.getvalue()
+
+        st.download_button(
+            label="📥 Download Processed Dataset as Excel",
+            data=processed_excel,
+            file_name="processed_flood_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        st.markdown("### 🧾 Quick Summary (Numeric Columns)")
+        st.dataframe(df_filled.describe().round(2))
+
+        if show_explanations:
+            st.markdown("""
+            **Explanation:**  
+            - Missing and zero values are automatically replaced by column medians.  
+            - The processed dataset is now ready for modeling and can be downloaded as Excel.
+            """)
 
         # ------------------------------
         # Monthly flood probability (fixed)
@@ -691,5 +702,6 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
