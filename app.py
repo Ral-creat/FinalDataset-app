@@ -300,48 +300,129 @@ with tabs[0]:
         st.table(col_df)
 
 # ------------------------------
-# Cleaning & EDA
+# Cleaning & EDA Tab
 # ------------------------------
 with tabs[1]:
-    st.header("🧹 Data Cleaning & EDA")
-    df_raw = st.session_state.get('df_raw', None)
-    if df_raw is None:
-        st.warning("Please upload a dataset first.")
+    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
+
+    if df_loaded is None:
+        st.warning("Upload a dataset first in the Data Upload tab.")
     else:
-        df = df_raw.copy()
+        # 1) Basic cleaning -> canonical columns
+        df_clean_local = load_and_basic_clean(df_loaded)
+        st.session_state['df_clean'] = df_clean_local
 
-        # Clean numeric columns
-        for col in ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']:
-            if col in df.columns:
-                df[col] = clean_numeric(df[col])
+        # 2) Automatic median fill for zeros & NaNs (excluding date parts)
+        df_processed_local, med_df_local = median_fill_zeros_and_nans(df_clean_local, exclude_columns=['Year','Month_Num','Day'])
+        st.session_state['df_processed'] = df_processed_local
+        st.session_state['medians_df'] = med_df_local
 
-        # Fill median automatically
-        df_filled = fill_median(df)
+        st.subheader("After basic cleaning (head) — processed automatically with median fill")
+        # Let user choose whether to view raw vs processed default based on sidebar toggle
+        show_processed = show_processed_default
+        if st.checkbox("Toggle: show RAW data instead of processed (expands below)", value=False):
+            show_processed = False
 
-        # Store the processed dataset for ML models
-        st.session_state['df_processed'] = df_filled
+        if show_processed:
+            st.caption("This is the **processed** dataset (zeros/NaNs in numeric columns replaced by median).")
+            st.dataframe(df_processed_local.head(10))
+        else:
+            st.caption("This is the **raw cleaned** dataset (before median fill).")
+            st.dataframe(df_clean_local.head(10))
 
-        # Show Raw Data
-        st.subheader("📘 Raw Dataset (Before Median Filling)")
-        st.dataframe(df.head(20), use_container_width=True)
+        # Show medians used and a before/after preview side-by-side
+        st.subheader("Median values used for filling (numeric columns)")
+        st.dataframe(med_df_local, use_container_width=True)
 
-        # Show Median-Filled Data
-        st.subheader("📗 Processed Dataset (After Median Filling)")
-        st.dataframe(df_filled.head(20), use_container_width=True)
+        st.subheader("Compare Raw vs Processed (first 20 rows)")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Raw cleaned (first 20 rows)**")
+            st.dataframe(df_clean_local.head(20), use_container_width=True)
+        with col2:
+            st.markdown("**Processed (median-filled) (first 20 rows)**")
+            st.dataframe(df_processed_local.head(20), use_container_width=True)
 
-        # Quick summary
-        st.markdown("### 🧾 Quick Summary (Numeric Columns)")
-        st.dataframe(df_filled.describe().round(2))
+        # Basic stats (processed)
+        st.subheader("Summary statistics (numerical) — processed dataset")
+        st.write(df_processed_local.select_dtypes(include=[np.number]).describe())
 
-        if show_explanations:
-            st.markdown("""
-            **Explanation:**  
-            - All numeric columns automatically cleaned and filled using median values.  
-            - Zero and missing values are replaced with the column's median.  
-            - This ensures models don’t fail due to missing or invalid data.
-            """)
+        # Water Level distribution (Plotly) using processed
+        if 'Water Level' in df_processed_local.columns:
+            st.subheader("Water Level distribution (processed)")
+            fig = px.histogram(
+                df_processed_local,
+                x='Water Level',
+                nbins=30,
+                marginal="box",
+                title="Distribution of Processed Water Level"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This histogram shows `Water Level` distribution after cleaning and median-filling zeros/NaNs.
+                The boxplot margin highlights potential outliers.
+                """)
 
+        # Monthly flood probability (processed)
+        if 'Month' in df_processed_local.columns:
+            if 'flood_occurred' not in df_processed_local.columns:
+                df_processed_local['flood_occurred'] = (df_processed_local['Water Level'].fillna(0) > 0).astype(int)
 
+            st.subheader("Monthly Flood Probability (processed)")
+            month_map = {
+                1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                9: 'September', 10: 'October', 11: 'November', 12: 'December'
+            }
+
+            def clean_month(val):
+                try:
+                    val_str = str(val).strip().lower()
+                    if val_str.isdigit():
+                        num = int(val_str)
+                        return month_map.get(num, np.nan)
+                    for num, name in month_map.items():
+                        if val_str.startswith(name[:3].lower()):
+                            return name
+                    return np.nan
+                except:
+                    return np.nan
+
+            df_processed_local['Month_clean'] = df_processed_local['Month'].apply(clean_month)
+            df_proc_month = df_processed_local.dropna(subset=['Month_clean'])
+            m_stats = df_proc_month.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
+            m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
+            m_stats['Month_clean'] = pd.Categorical(m_stats['Month_clean'], categories=list(month_map.values()), ordered=True)
+            m_stats = m_stats.sort_values('Month_clean')
+            fig = px.bar(m_stats, x='Month_clean', y='probability', title="Flood Probability by Month (processed)", text='probability')
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("**Explanation:** Probability = (# flooding records) / (total records in that month) using processed data.")
+
+        # Municipality and Barangay probabilities
+        if 'Municipality' in df_processed_local.columns:
+            st.subheader("Flood probability by Municipality (processed)")
+            mun = df_processed_local.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
+            mun['probability'] = (mun['sum'] / mun['count']).round(3)
+            mun = mun.sort_values('probability', ascending=False)
+            fig = px.bar(mun, x='Municipality', y='probability', title="Flood Probability by Municipality (processed)", text='probability')
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Municipality", yaxis_title="Flood Probability")
+            st.plotly_chart(fig, use_container_width=True)
+
+        if 'Barangay' in df_processed_local.columns:
+            st.subheader("Flood probability by Barangay (processed)")
+            br = df_processed_local.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
+            br['probability'] = (br['sum'] / br['count']).round(3)
+            br = br.sort_values('probability', ascending=False)
+            fig = px.bar(br, x='Barangay', y='probability', title="Flood Probability by Barangay (processed)", text='probability')
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Barangay", yaxis_title="Flood Probability")
+            st.plotly_chart(fig, use_container_width=True)
         # ------------------------------
         # Monthly flood probability (fixed)
         # ------------------------------
@@ -847,5 +928,6 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
