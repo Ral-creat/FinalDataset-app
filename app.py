@@ -31,45 +31,194 @@ local_css("style.css")
 st.set_page_config(layout="wide", page_title="Flood Pattern Analysis Dashboard")
 
 # ------------------------------
-# Helper Functions
+# Helpers: Cleaning & Preprocess
 # ------------------------------
-def clean_numeric(series):
-    return (
-        series.astype(str)
-        .str.replace(",", "")
-        .str.replace("ft", "")
-        .str.replace("m", "")
-        .str.extract(r"(\d+\.?\d*)")[0]
-        .astype(float)
-    )
+def clean_water_level(series):
+    s = series.astype(str).str.replace(' ft.', '', regex=False)\
+                         .str.replace(' ft', '', regex=False)\
+                         .str.replace('ft', '', regex=False)\
+                         .str.replace(' ', '', regex=False)\
+                         .replace('nan', pd.NA)
+    s = pd.to_numeric(s, errors='coerce')
+    return s
 
-def categorize_severity(water_level):
-    if water_level < 1:
-        return "Low"
-    elif 1 <= water_level < 3:
-        return "Medium"
-    else:
-        return "High"
+def clean_damage_col(col):
+    s = col.astype(str).str.replace(',', '', regex=False)
+    # fix weird patterns like '422.510.5' -> '4225105' if present
+    s = s.str.replace(r'(\d)\.(\d)\.(\d)', lambda m: m.group(1)+m.group(2)+m.group(3), regex=True)
+    s = pd.to_numeric(s, errors='coerce')
+    return s
+
+def _find_col(df, candidate_lower):
+    """
+    Return actual column name in df that matches candidate_lower (case-insensitive),
+    or None if not found.
+    """
+    for c in df.columns:
+        if c.strip().lower() == candidate_lower:
+            return c
+    return None
+
+def load_and_basic_clean(df):
+    # Work on a copy
+    df = df.copy()
+
+    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
+    df.columns = [c.strip() for c in df.columns]
+
+    # Create canonical column names (if any variant exists)
+    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
+    # The rest of your app expects those canonical names.
+    col_map = {
+        'year': _find_col(df, 'year'),
+        'month': _find_col(df, 'month'),
+        'month_num': _find_col(df, 'month_num'),
+        'day': _find_col(df, 'day'),
+        'water_level': _find_col(df, 'water level'),
+        'families': _find_col(df, 'no. of families affected'),
+        'damage_infra': _find_col(df, 'damage infrastructure'),
+        'damage_agri': _find_col(df, 'damage agriculture'),
+        'municipality': _find_col(df, 'municipality'),
+        'barangay': _find_col(df, 'barangay')
+    }
+
+    # Copy found columns into canonical names (only if found)
+    if col_map['year'] is not None:
+        df['Year'] = df[col_map['year']]
+    if col_map['month'] is not None:
+        df['Month'] = df[col_map['month']].astype(str).str.strip()
+    if col_map['month_num'] is not None:
+        df['Month_Num'] = df[col_map['month_num']]
+    if col_map['day'] is not None:
+        df['Day'] = df[col_map['day']]
+    if col_map['water_level'] is not None:
+        df['Water Level'] = df[col_map['water_level']]
+    if col_map['families'] is not None:
+        df['No. of Families affected'] = df[col_map['families']]
+    if col_map['damage_infra'] is not None:
+        df['Damage Infrastructure'] = df[col_map['damage_infra']]
+    if col_map['damage_agri'] is not None:
+        df['Damage Agriculture'] = df[col_map['damage_agri']]
+    if col_map['municipality'] is not None:
+        df['Municipality'] = df[col_map['municipality']]
+    if col_map['barangay'] is not None:
+        df['Barangay'] = df[col_map['barangay']]
+
+    # Standardize Month to uppercase names if exists
+    if 'Month' in df.columns:
+        df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
+
+    # If Month_Num wasn't provided but Month names are, map names to numbers
+    if 'Month_Num' not in df.columns and 'Month' in df.columns:
+        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
+        df['Month_Num'] = df['Month'].map(month_map)
+
+    # Clean water level if present
+    if 'Water Level' in df.columns:
+        df['Water Level'] = clean_water_level(df['Water Level'])
+        # If too many missing, leave them but otherwise impute with median
+        if df['Water Level'].notna().sum() > 0:
+            median_wl = df['Water Level'].median()
+            df['Water Level'] = df['Water Level'].fillna(median_wl)
+
+    # Families affected
+    if 'No. of Families affected' in df.columns:
+        df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
+        if df['No. of Families affected'].notna().sum() > 0:
+            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
+
+    # Damage columns
+    for col in ['Damage Infrastructure', 'Damage Agriculture']:
+        if col in df.columns:
+            df[col] = clean_damage_col(df[col])
+            df[col] = df[col].fillna(0)
+
+    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
+    for c in ['Year','Month_Num','Day']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
+    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
+    for c in ['Year','Month_Num','Day']:
+        if c in df.columns:
+            # attempt forward then backward fill but only for short gaps
+            df[c] = df[c].ffill().bfill()
+
+    return df
 
 def create_datetime_index(df):
+    """
+    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
+    Returns a dataframe with a Date index if possible; otherwise returns the original df.
+    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
+    and avoids integer-casting errors by using pd.to_datetime with dict input.
+    """
+    tmp = df.copy()
+
+    # If Month exists but Month_Num doesn't, try mapping (safe)
+    if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
+        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
+        tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
+
+    # Ensure we have at least Year and something for month/day
+    if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
+        # Not enough parts to build a date index
+        return df
+
+    # Coerce to numeric, leaving invalid as NaN
+    tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
+    tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
+    tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
+
+    # Drop rows where essential parts are missing - can't build a date
+    before = len(tmp)
+    tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
+    dropped = before - len(tmp)
+    if dropped > 0:
+        st.info(f"Dropped {dropped} rows with missing Year/Month/Day parts which couldn't form valid dates.")
+
+    if tmp.empty:
+        return df
+
+    # Convert to integer where safe
+    # (they're floats because of NaNs; cast after dropping NaNs)
+    tmp['Year'] = tmp['Year'].astype(int)
+    tmp['Month_Num'] = tmp['Month_Num'].astype(int)
+    tmp['Day'] = tmp['Day'].astype(int)
+
+    # Now build Date column using dict -> safe assembly
+    tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
+
+    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
+    before2 = len(tmp)
+    tmp = tmp.dropna(subset=['Date']).copy()
+    dropped2 = before2 - len(tmp)
+    if dropped2 > 0:
+        st.info(f"Dropped {dropped2} rows with invalid date combinations (e.g., Feb 30).")
+
+    if tmp.empty:
+        return df
+
+    tmp = tmp.set_index('Date').sort_index()
+    return tmp
+
+def categorize_severity(w):
+    if pd.isna(w):
+        return 'Unknown'
     try:
-        df['Date'] = pd.to_datetime(df[['Year','Month','Day']])
-        df = df.set_index('Date')
-        return df
-    except Exception:
-        return df
+        w = float(w)
+    except:
+        return 'Unknown'
+    if w <= 5:
+        return 'Low'
+    elif 5 < w <= 15:
+        return 'Medium'
+    else:
+        return 'High'
 
-def fill_median(df):
-    df_filled = df.copy()
-    numeric_cols = df_filled.select_dtypes(include=[np.number]).columns
-    exclude = ['Year', 'Month', 'Day']
-    numeric_cols = [c for c in numeric_cols if c not in exclude]
-
-    for col in numeric_cols:
-        median_val = df_filled.loc[df_filled[col] != 0, col].median()
-        df_filled[col] = df_filled[col].replace(0, np.nan)
-        df_filled[col] = df_filled[col].fillna(median_val)
-    return df_filled
 # ------------------------------
 # UI Layout
 # ------------------------------
@@ -149,7 +298,8 @@ with tabs[0]:
             "Example Value": [str(df_raw[col].iloc[0]) if not df_raw[col].empty else "" for col in df_raw.columns]
         })
         st.table(col_df)
-      # ------------------------------
+
+# ------------------------------
 # Cleaning & EDA Tab
 # ------------------------------
 with tabs[1]:
@@ -278,180 +428,7 @@ with tabs[1]:
                 guiding local preparedness and response planning.
                 """)
          # ------------------------------
-        # Municipal flood probabilities
-        # ------------------------------
-        if 'Barangay' in df.columns:
-            st.subheader("Flood probability by Barangay")
-            mun = df.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
-            mun['probability'] = (mun['sum'] / mun['count']).round(3)
-            mun = mun.sort_values('probability', ascending=False)
-            fig = px.bar(
-                mun,
-                x='Barangay',
-                y='probability',
-                title="Flood Probability by Barangay",
-                text='probability'
-            )
-            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Barangay", yaxis_title="Flood Probability")
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This helps identify which Barangay historically experience more flooding,
-                guiding local preparedness and response planning.
-                """)
-
-# ------------------------------
-# Clustering Tab (KMeans)
-# ------------------------------
-with tabs[2]:
-    st.header("Clustering (KMeans)")
-    df = st.session_state.get('df_processed', None)
-
-    if df is None:
-        st.warning("⚠️ Please run data cleaning first.")
-    else:
-        features = ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']
-
-        if not set(features).issubset(df.columns):
-            st.error("Missing required columns for clustering.")
-        else:
-            st.subheader("KMeans clustering (k=3 default)")
-
-            # ✅ Filter numeric columns only and handle NaN safely
-            X_cluster = df[features].apply(pd.to_numeric, errors='coerce')
-            X_cluster = X_cluster.fillna(X_cluster.median())
-
-            # 🔒 Ensure all values are finite
-            X_cluster = X_cluster.replace([float('inf'), float('-inf')], np.nan)
-            X_cluster = X_cluster.fillna(0)
-
-            k = st.slider("Number of clusters (k)", 2, 6, 3)
-            try:
-                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X_cluster)
-                df['Cluster'] = kmeans.labels_
-
-                counts = df['Cluster'].value_counts().sort_index()
-                st.write("Cluster counts:")
-                st.write(counts)
-
-                # Plot 3D Scatter
-                fig = px.scatter_3d(
-                    df, 
-                    x='Water Level', 
-                    y='No. of Families affected', 
-                    z='Damage Infrastructure',
-                    color='Cluster', 
-                    hover_data=['Barangay', 'Municipality', 'Flood Cause'],
-                    title="KMeans clusters (3D)"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                st.subheader("Cluster summary (numeric medians)")
-                cluster_summary = df.groupby('Cluster')[features].median().round(2)
-                st.dataframe(cluster_summary)
-
-                if show_explanations:
-                    st.markdown("**Explanation:** KMeans grouped flood events into clusters based on numeric severity variables.")
-            
-            except Exception as e:
-                st.error(f"❌ KMeans clustering failed: {e}")
-
-        # ------------------------------
-        # Monthly flood probability (fixed)
-        # ------------------------------
-        if 'Month' in df.columns:
-            # create flood_occurred column if not exists
-            if 'flood_occurred' not in df.columns:
-                df['flood_occurred'] = (df['Water Level'].fillna(0) > 0).astype(int)
-
-            st.subheader("Monthly Flood Probability")
-
-            # month mapping
-            month_map = {
-                1: 'January', 2: 'February', 3: 'March', 4: 'April',
-                5: 'May', 6: 'June', 7: 'July', 8: 'August',
-                9: 'September', 10: 'October', 11: 'November', 12: 'December'
-            }
-
-            # clean and convert month formats
-            def clean_month(val):
-                try:
-                    val_str = str(val).strip().lower()
-                    # numeric (1–12 or '01')
-                    if val_str.isdigit():
-                        num = int(val_str)
-                        return month_map.get(num, np.nan)
-                    # short text (jan, feb, mar…)
-                    for num, name in month_map.items():
-                        if val_str.startswith(name[:3].lower()):
-                            return name
-                    return np.nan
-                except:
-                    return np.nan
-
-            df['Month_clean'] = df['Month'].apply(clean_month)
-            df = df.dropna(subset=['Month_clean'])
-
-            # compute monthly stats
-            m_stats = df.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
-            m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
-
-            # keep months in correct order
-            m_stats['Month_clean'] = pd.Categorical(
-                m_stats['Month_clean'],
-                categories=list(month_map.values()),
-                ordered=True
-            )
-            m_stats = m_stats.sort_values('Month_clean')
-
-            # bar chart
-            fig = px.bar(
-                m_stats,
-                x='Month_clean',
-                y='probability',
-                title="Flood Probability by Month",
-                text='probability'
-            )
-            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
-
-            st.plotly_chart(fig, use_container_width=True)
-
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This chart shows the chance of flooding per month.  
-                - **Probability = Flood occurrences / Total records in that month**  
-                Months with higher bars indicate higher flood risk periods.  
-                """)
-        # ------------------------------
-        # Municipal flood probabilities
-        # ------------------------------
-        if 'Municipality' in df.columns:
-            st.subheader("Flood probability by Municipality")
-            mun = df.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
-            mun['probability'] = (mun['sum'] / mun['count']).round(3)
-            mun = mun.sort_values('probability', ascending=False)
-            fig = px.bar(
-                mun,
-                x='Municipality',
-                y='probability',
-                title="Flood Probability by Municipality",
-                text='probability'
-            )
-            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Municipality", yaxis_title="Flood Probability")
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This helps identify which municipalities historically experience more flooding,
-                guiding local preparedness and response planning.
-                """)
-         # ------------------------------
-        # Municipal flood probabilities
+        # Barangay flood probabilities
         # ------------------------------
         if 'Barangay' in df.columns:
             st.subheader("Flood probability by Barangay")
@@ -863,8 +840,3 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
-
-
-
-
-
