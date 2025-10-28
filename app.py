@@ -66,7 +66,8 @@ def load_and_basic_clean(df):
     non_zero = series[series != 0]
     median_val = non_zero.median() if len(non_zero) > 0 else 0
     # Replace 0 and NaN with median
-    return series.replace(0, median_val).fillna(median_val)
+   series.replace(0, median_val).fillna(median_val)
+ return s
 
 def load_and_basic_clean(df):
     df = df.copy()
@@ -839,5 +840,6 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
