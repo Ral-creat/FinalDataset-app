@@ -68,11 +68,6 @@ def load_and_basic_clean(df):
     # Replace 0 and NaN with median
    series.replace(0, median_val).fillna(median_val)
  return s
-
-def load_and_basic_clean(df):
-    df = df.copy()
-    df.columns = [c.strip() for c in df.columns]
-
     # Canonical column mapping
     col_map = {
         'year': _find_col(df, 'year'),
@@ -840,6 +835,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
