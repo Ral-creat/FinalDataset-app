@@ -59,25 +59,16 @@ def _find_col(df, candidate_lower):
             return c
     return None
 
-def fill_zero_with_median(series):
-    """Replace zeros and NaNs with median of non-zero values."""
-    series = pd.to_numeric(series, errors='coerce')
-    non_zero = series[series != 0]
-    median_val = non_zero.median() if len(non_zero) > 0 else 0
-    return series.replace(0, median_val).fillna(median_val)
-
 def load_and_basic_clean(df):
+    # Work on a copy
     df = df.copy()
+
+    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
     df.columns = [c.strip() for c in df.columns]
 
-    # Helper to find column names
-    def _find_col(df, candidate_lower):
-        for c in df.columns:
-            if c.strip().lower() == candidate_lower:
-                return c
-        return None
-
-    # Map canonical names
+    # Create canonical column names (if any variant exists)
+    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
+    # The rest of your app expects those canonical names.
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -91,56 +82,68 @@ def load_and_basic_clean(df):
         'barangay': _find_col(df, 'barangay')
     }
 
-    # Copy found columns into canonical names
-    if col_map['year']: df['Year'] = df[col_map['year']]
-    if col_map['month']: df['Month'] = df[col_map['month']].astype(str).str.strip()
-    if col_map['month_num']: df['Month_Num'] = df[col_map['month_num']]
-    if col_map['day']: df['Day'] = df[col_map['day']]
-    if col_map['water_level']: df['Water Level'] = df[col_map['water_level']]
-    if col_map['families']: df['No. of Families affected'] = df[col_map['families']]
-    if col_map['damage_infra']: df['Damage Infrastructure'] = df[col_map['damage_infra']]
-    if col_map['damage_agri']: df['Damage Agriculture'] = df[col_map['damage_agri']]
-    if col_map['municipality']: df['Municipality'] = df[col_map['municipality']]
-    if col_map['barangay']: df['Barangay'] = df[col_map['barangay']]
+    # Copy found columns into canonical names (only if found)
+    if col_map['year'] is not None:
+        df['Year'] = df[col_map['year']]
+    if col_map['month'] is not None:
+        df['Month'] = df[col_map['month']].astype(str).str.strip()
+    if col_map['month_num'] is not None:
+        df['Month_Num'] = df[col_map['month_num']]
+    if col_map['day'] is not None:
+        df['Day'] = df[col_map['day']]
+    if col_map['water_level'] is not None:
+        df['Water Level'] = df[col_map['water_level']]
+    if col_map['families'] is not None:
+        df['No. of Families affected'] = df[col_map['families']]
+    if col_map['damage_infra'] is not None:
+        df['Damage Infrastructure'] = df[col_map['damage_infra']]
+    if col_map['damage_agri'] is not None:
+        df['Damage Agriculture'] = df[col_map['damage_agri']]
+    if col_map['municipality'] is not None:
+        df['Municipality'] = df[col_map['municipality']]
+    if col_map['barangay'] is not None:
+        df['Barangay'] = df[col_map['barangay']]
 
-    # Standardize Month
+    # Standardize Month to uppercase names if exists
     if 'Month' in df.columns:
-        df['Month'] = df['Month'].str.upper().replace({'NAN': pd.NA})
+        df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
 
-    # Map Month to Month_Num if missing
+    # If Month_Num wasn't provided but Month names are, map names to numbers
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean Water Level
+    # Clean water level if present
     if 'Water Level' in df.columns:
-        df['Water Level'] = pd.to_numeric(
-            df['Water Level'].astype(str).str.replace(' ft.', '').str.replace(' ft','').str.replace('ft','').str.strip().replace('nan', pd.NA),
-            errors='coerce'
-        )
+        df['Water Level'] = clean_water_level(df['Water Level'])
+        # If too many missing, leave them but otherwise impute with median
         if df['Water Level'].notna().sum() > 0:
-            df['Water Level'] = fill_zero_with_median(df['Water Level'])
+            median_wl = df['Water Level'].median()
+            df['Water Level'] = df['Water Level'].fillna(median_wl)
 
-    # Clean No. of Families affected
+    # Families affected
     if 'No. of Families affected' in df.columns:
-        df['No. of Families affected'] = pd.to_numeric(
-            df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce'
-        )
+        df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
         if df['No. of Families affected'].notna().sum() > 0:
-            df['No. of Families affected'] = fill_zero_with_median(df['No. of Families affected'])
+            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
 
-    # Clean Damage columns
+    # Damage columns
     for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
-            s = df[col].astype(str).str.replace(',', '').str.replace(r'(\d)\.(\d)\.(\d)', lambda m: m.group(1)+m.group(2)+m.group(3), regex=True)
-            s = pd.to_numeric(s, errors='coerce')
-            df[col] = fill_zero_with_median(s)
+            df[col] = clean_damage_col(df[col])
+            df[col] = df[col].fillna(0)
 
-    # Ensure numeric date columns
+    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
+    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
+    for c in ['Year','Month_Num','Day']:
+        if c in df.columns:
+            # attempt forward then backward fill but only for short gaps
             df[c] = df[c].ffill().bfill()
 
     return df
@@ -556,37 +559,25 @@ with tabs[3]:
         if show_explanations:
             st.markdown("**Explanation:** Features with higher importance contributed more to model decisions. `Water Level` often dominates.")
 
-       # Allow user to show predicted probabilities per month (using median inputs)
-if st.button("Show predicted flood probability per month (using median inputs)"):
-    median_vals = X_basic.median()
-    months = sorted(df['Month'].dropna().unique())
-    pred_rows = []
-    for m in months:
-        row = median_vals.copy()
-        # set the month dummy for this month to 1 and others to 0 if present
-        md = [c for c in X_basic.columns if c.startswith('Month_')]
-        for col in md:
-            row[col] = 1 if col == f"Month_{m}" else 0
-        pred_rows.append(row.values)
-    Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-    
-    # Handle binary vs multi-class output safely
-    try:
-        probs = model.predict_proba(Xpred)
-        if probs.shape[1] == 1:
-            # Binary classifier returns single column sometimes
-            probs = np.hstack([1 - probs, probs])
-        probs = probs[:,1]  # probability of flood occurrence
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
-        probs = np.zeros(len(months))
-    
-    prob_df = pd.DataFrame({'Month': months, 'flood_prob': probs}).sort_values('flood_prob', ascending=False)
-    fig = px.bar(prob_df, x='Month', y='flood_prob', title="Predicted flood probability per month (median inputs)")
-    st.plotly_chart(fig, use_container_width=True)
-    
-    if show_explanations:
-        st.markdown("**Explanation:** This uses median numeric values and swaps month dummies to estimate flood likelihood per month. It's a model-based estimate, not a raw frequency.")
+        # Allow user to show predicted probabilities per month (as earlier notebook did)
+        if st.button("Show predicted flood probability per month (using median inputs)"):
+            median_vals = X_basic.median()
+            months = sorted(df['Month'].dropna().unique())
+            pred_rows = []
+            for m in months:
+                row = median_vals.copy()
+                # set the month dummy for this month to 1 and others to 0 if present
+                md = [c for c in X_basic.columns if c.startswith('Month_')]
+                for col in md:
+                    row[col] = 1 if col == f"Month_{m}" else 0
+                pred_rows.append(row.values)
+            Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
+            probs = model.predict_proba(Xpred)[:,1]
+            prob_df = pd.DataFrame({'Month':months,'flood_prob':probs}).sort_values('flood_prob',ascending=False)
+            fig = px.bar(prob_df, x='Month', y='flood_prob', title="Predicted flood probability per month (median inputs)")
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("**Explanation:** This uses median numeric values and swaps month dummies to estimate flood likelihood per month. It's a model-based estimate, not a raw frequency.")
 
 # ------------------------------
 # Flood Severity Tab
@@ -849,14 +840,3 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
-
-
-
-
-
-
-
-
-
-
-
