@@ -1,4 +1,4 @@
-  # app.py
+# app.py
 # Flood Pattern Data Mining & Forecasting - Streamlit Port of floodpatternv2.ipynb
 # Interactive Plotly charts + automatic explanations below each output
 # Author: ChatGPT (converted for Streamlit)
@@ -20,19 +20,17 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore")
+
 # ================== LOAD LOCAL CSS ==================
 def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 local_css("style.css")
 # ====================================================
 
 st.set_page_config(layout="wide", page_title="Flood Pattern Analysis Dashboard")
 
-# ------------------------------
-# Helpers: Cleaning & Preprocess
-# ------------------------------
+# ------------------------------ Helpers ------------------------------
 def clean_water_level(series):
     s = series.astype(str).str.replace(' ft.', '', regex=False)\
                          .str.replace(' ft', '', regex=False)\
@@ -44,31 +42,20 @@ def clean_water_level(series):
 
 def clean_damage_col(col):
     s = col.astype(str).str.replace(',', '', regex=False)
-    # fix weird patterns like '422.510.5' -> '4225105' if present
     s = s.str.replace(r'(\d)\.(\d)\.(\d)', lambda m: m.group(1)+m.group(2)+m.group(3), regex=True)
     s = pd.to_numeric(s, errors='coerce')
     return s
 
 def _find_col(df, candidate_lower):
-    """
-    Return actual column name in df that matches candidate_lower (case-insensitive),
-    or None if not found.
-    """
     for c in df.columns:
         if c.strip().lower() == candidate_lower:
             return c
     return None
 
 def load_and_basic_clean(df):
-    # Work on a copy
     df = df.copy()
-
-    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
     df.columns = [c.strip() for c in df.columns]
 
-    # Create canonical column names (if any variant exists)
-    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
-    # The rest of your app expects those canonical names.
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -82,142 +69,85 @@ def load_and_basic_clean(df):
         'barangay': _find_col(df, 'barangay')
     }
 
-    # Copy found columns into canonical names (only if found)
-    if col_map['year'] is not None:
-        df['Year'] = df[col_map['year']]
-    if col_map['month'] is not None:
-        df['Month'] = df[col_map['month']].astype(str).str.strip()
-    if col_map['month_num'] is not None:
-        df['Month_Num'] = df[col_map['month_num']]
-    if col_map['day'] is not None:
-        df['Day'] = df[col_map['day']]
-    if col_map['water_level'] is not None:
-        df['Water Level'] = df[col_map['water_level']]
-    if col_map['families'] is not None:
-        df['No. of Families affected'] = df[col_map['families']]
-    if col_map['damage_infra'] is not None:
-        df['Damage Infrastructure'] = df[col_map['damage_infra']]
-    if col_map['damage_agri'] is not None:
-        df['Damage Agriculture'] = df[col_map['damage_agri']]
-    if col_map['municipality'] is not None:
-        df['Municipality'] = df[col_map['municipality']]
-    if col_map['barangay'] is not None:
-        df['Barangay'] = df[col_map['barangay']]
+    if col_map['year'] is not None: df['Year'] = df[col_map['year']]
+    if col_map['month'] is not None: df['Month'] = df[col_map['month']].astype(str).str.strip()
+    if col_map['month_num'] is not None: df['Month_Num'] = df[col_map['month_num']]
+    if col_map['day'] is not None: df['Day'] = df[col_map['day']]
+    if col_map['water_level'] is not None: df['Water Level'] = df[col_map['water_level']]
+    if col_map['families'] is not None: df['No. of Families affected'] = df[col_map['families']]
+    if col_map['damage_infra'] is not None: df['Damage Infrastructure'] = df[col_map['damage_infra']]
+    if col_map['damage_agri'] is not None: df['Damage Agriculture'] = df[col_map['damage_agri']]
+    if col_map['municipality'] is not None: df['Municipality'] = df[col_map['municipality']]
+    if col_map['barangay'] is not None: df['Barangay'] = df[col_map['barangay']]
 
-    # Standardize Month to uppercase names if exists
     if 'Month' in df.columns:
         df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
 
-    # If Month_Num wasn't provided but Month names are, map names to numbers
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean water level if present
+    # ---------- MEDIAN FIXED COLUMNS ----------
     if 'Water Level' in df.columns:
         df['Water Level'] = clean_water_level(df['Water Level'])
-        # If too many missing, leave them but otherwise impute with median
+        df['Water Level'] = df['Water Level'].replace(0, pd.NA)
         if df['Water Level'].notna().sum() > 0:
             median_wl = df['Water Level'].median()
             df['Water Level'] = df['Water Level'].fillna(median_wl)
 
-    # Families affected
     if 'No. of Families affected' in df.columns:
         df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
+        df['No. of Families affected'] = df['No. of Families affected'].replace(0, pd.NA)
         if df['No. of Families affected'].notna().sum() > 0:
-            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
+            median_fam = df['No. of Families affected'].median()
+            df['No. of Families affected'] = df['No. of Families affected'].fillna(median_fam)
 
-    # Damage columns
     for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
             df[col] = clean_damage_col(df[col])
-            df[col] = df[col].fillna(0)
+            df[col] = df[col].replace(0, pd.NA)
+            if df[col].notna().sum() > 0:
+                median_val = df[col].median()
+                df[col] = df[col].fillna(median_val)
 
-    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
-
-    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
-    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
-    for c in ['Year','Month_Num','Day']:
-        if c in df.columns:
-            # attempt forward then backward fill but only for short gaps
             df[c] = df[c].ffill().bfill()
 
     return df
 
 def create_datetime_index(df):
-    """
-    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
-    Returns a dataframe with a Date index if possible; otherwise returns the original df.
-    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
-    and avoids integer-casting errors by using pd.to_datetime with dict input.
-    """
     tmp = df.copy()
-
-    # If Month exists but Month_Num doesn't, try mapping (safe)
     if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
-
-    # Ensure we have at least Year and something for month/day
-    if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
-        # Not enough parts to build a date index
+    if not ({'Year','Month_Num','Day'}.issubset(tmp.columns)):
         return df
-
-    # Coerce to numeric, leaving invalid as NaN
     tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
     tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
     tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
-
-    # Drop rows where essential parts are missing - can't build a date
     before = len(tmp)
-    tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
+    tmp = tmp.dropna(subset=['Year','Month_Num','Day']).copy()
     dropped = before - len(tmp)
-    if dropped > 0:
-        st.info(f"Dropped {dropped} rows with missing Year/Month/Day parts which couldn't form valid dates.")
-
-    if tmp.empty:
-        return df
-
-    # Convert to integer where safe
-    # (they're floats because of NaNs; cast after dropping NaNs)
+    if tmp.empty: return df
     tmp['Year'] = tmp['Year'].astype(int)
     tmp['Month_Num'] = tmp['Month_Num'].astype(int)
     tmp['Day'] = tmp['Day'].astype(int)
-
-    # Now build Date column using dict -> safe assembly
     tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
-
-    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
-    before2 = len(tmp)
     tmp = tmp.dropna(subset=['Date']).copy()
-    dropped2 = before2 - len(tmp)
-    if dropped2 > 0:
-        st.info(f"Dropped {dropped2} rows with invalid date combinations (e.g., Feb 30).")
-
-    if tmp.empty:
-        return df
-
     tmp = tmp.set_index('Date').sort_index()
     return tmp
 
 def categorize_severity(w):
-    if pd.isna(w):
-        return 'Unknown'
-    try:
-        w = float(w)
-    except:
-        return 'Unknown'
-    if w <= 5:
-        return 'Low'
-    elif 5 < w <= 15:
-        return 'Medium'
-    else:
-        return 'High'
+    if pd.isna(w): return 'Unknown'
+    try: w = float(w)
+    except: return 'Unknown'
+    if w <= 5: return 'Low'
+    elif 5 < w <= 15: return 'Medium'
+    else: return 'High'
 
 # ------------------------------
 # UI Layout
@@ -840,3 +770,4 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
