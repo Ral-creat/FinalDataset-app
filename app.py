@@ -132,14 +132,122 @@ with tabs[1]:
             - Missing and zero values are automatically replaced by column medians.  
             - The processed dataset is now ready for modeling and can be downloaded as Excel.
             """)
+ # ------------------------------
+        # Monthly flood probability (fixed)
+        # ------------------------------
+        if 'Month' in df.columns:
+            # create flood_occurred column if not exists
+            if 'flood_occurred' not in df.columns:
+                df['flood_occurred'] = (df['Water Level'].fillna(0) > 0).astype(int)
 
-# ------------------------------
-# The rest of your app code (unchanged)
-# ------------------------------
-# Clustering, RandomForest, Severity, SARIMA, Tutorial
-# (copy from previous version – all still work perfectly)
+            st.subheader("Monthly Flood Probability")
 
+            # month mapping
+            month_map = {
+                1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                9: 'September', 10: 'October', 11: 'November', 12: 'December'
+            }
 
+            # clean and convert month formats
+            def clean_month(val):
+                try:
+                    val_str = str(val).strip().lower()
+                    # numeric (1–12 or '01')
+                    if val_str.isdigit():
+                        num = int(val_str)
+                        return month_map.get(num, np.nan)
+                    # short text (jan, feb, mar…)
+                    for num, name in month_map.items():
+                        if val_str.startswith(name[:3].lower()):
+                            return name
+                    return np.nan
+                except:
+                    return np.nan
+
+            df['Month_clean'] = df['Month'].apply(clean_month)
+            df = df.dropna(subset=['Month_clean'])
+
+            # compute monthly stats
+            m_stats = df.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
+            m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
+
+            # keep months in correct order
+            m_stats['Month_clean'] = pd.Categorical(
+                m_stats['Month_clean'],
+                categories=list(month_map.values()),
+                ordered=True
+            )
+            m_stats = m_stats.sort_values('Month_clean')
+
+            # bar chart
+            fig = px.bar(
+                m_stats,
+                x='Month_clean',
+                y='probability',
+                title="Flood Probability by Month",
+                text='probability'
+            )
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This chart shows the chance of flooding per month.  
+                - **Probability = Flood occurrences / Total records in that month**  
+                Months with higher bars indicate higher flood risk periods.  
+                """)
+        # ------------------------------
+        # Municipal flood probabilities
+        # ------------------------------
+        if 'Municipality' in df.columns:
+            st.subheader("Flood probability by Municipality")
+            mun = df.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
+            mun['probability'] = (mun['sum'] / mun['count']).round(3)
+            mun = mun.sort_values('probability', ascending=False)
+            fig = px.bar(
+                mun,
+                x='Municipality',
+                y='probability',
+                title="Flood Probability by Municipality",
+                text='probability'
+            )
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Municipality", yaxis_title="Flood Probability")
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This helps identify which municipalities historically experience more flooding,
+                guiding local preparedness and response planning.
+                """)
+         # ------------------------------
+        # Municipal flood probabilities
+        # ------------------------------
+        if 'Barangay' in df.columns:
+            st.subheader("Flood probability by Barangay")
+            mun = df.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
+            mun['probability'] = (mun['sum'] / mun['count']).round(3)
+            mun = mun.sort_values('probability', ascending=False)
+            fig = px.bar(
+                mun,
+                x='Barangay',
+                y='probability',
+                title="Flood Probability by Barangay",
+                text='probability'
+            )
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig.update_layout(xaxis_title="Barangay", yaxis_title="Flood Probability")
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This helps identify which Barangay historically experience more flooding,
+                guiding local preparedness and response planning.
+                """)
 # ------------------------------
 # KMeans Clustering
 # ------------------------------
@@ -296,4 +404,5 @@ with tabs[6]:
     2. **Cleaning & EDA** → Automatic median filling for missing/zero numeric values.
     3. **KMeans / RandomForest / SARIMA** → All work off the filled dataset.
     """)
+
 
