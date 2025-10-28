@@ -151,51 +151,60 @@ with tabs[0]:
         st.table(col_df)
 
 # ------------------------------
-# Cleaning & EDA
+# Clustering Tab (KMeans)
 # ------------------------------
-with tabs[1]:
-    st.header("🧹 Data Cleaning & EDA")
-    df_raw = st.session_state.get('df_raw', None)
-    if df_raw is None:
-        st.warning("Please upload a dataset first.")
+with tabs[2]:
+    st.header("Clustering (KMeans)")
+    df = st.session_state.get('df_processed', None)
+
+    if df is None:
+        st.warning("⚠️ Please run data cleaning first.")
     else:
-        df = df_raw.copy()
+        features = ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']
 
-        for col in ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']:
-            if col in df.columns:
-                df[col] = clean_numeric(df[col])
+        if not set(features).issubset(df.columns):
+            st.error("Missing required columns for clustering.")
+        else:
+            st.subheader("KMeans clustering (k=3 default)")
 
-        df_filled = fill_median(df)
-        st.session_state['df_processed'] = df_filled
+            # ✅ Filter numeric columns only and handle NaN safely
+            X_cluster = df[features].apply(pd.to_numeric, errors='coerce')
+            X_cluster = X_cluster.fillna(X_cluster.median())
 
-        st.subheader("📘 Raw Dataset (Before Median Filling)")
-        st.dataframe(df.head(20), use_container_width=True)
+            # 🔒 Ensure all values are finite
+            X_cluster = X_cluster.replace([float('inf'), float('-inf')], np.nan)
+            X_cluster = X_cluster.fillna(0)
 
-        st.subheader("📗 Processed Dataset (After Median Filling)")
-        st.dataframe(df_filled.head(20), use_container_width=True)
+            k = st.slider("Number of clusters (k)", 2, 6, 3)
+            try:
+                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X_cluster)
+                df['Cluster'] = kmeans.labels_
 
-        # ✅ Download as Excel
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_filled.to_excel(writer, index=False, sheet_name='Processed_Data')
-        processed_excel = output.getvalue()
+                counts = df['Cluster'].value_counts().sort_index()
+                st.write("Cluster counts:")
+                st.write(counts)
 
-        st.download_button(
-            label="📥 Download Processed Dataset as Excel",
-            data=processed_excel,
-            file_name="processed_flood_data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+                # Plot 3D Scatter
+                fig = px.scatter_3d(
+                    df, 
+                    x='Water Level', 
+                    y='No. of Families affected', 
+                    z='Damage Infrastructure',
+                    color='Cluster', 
+                    hover_data=['Barangay', 'Municipality', 'Flood Cause'],
+                    title="KMeans clusters (3D)"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("### 🧾 Quick Summary (Numeric Columns)")
-        st.dataframe(df_filled.describe().round(2))
+                st.subheader("Cluster summary (numeric medians)")
+                cluster_summary = df.groupby('Cluster')[features].median().round(2)
+                st.dataframe(cluster_summary)
 
-        if show_explanations:
-            st.markdown("""
-            **Explanation:**  
-            - Missing and zero values are automatically replaced by column medians.  
-            - The processed dataset is now ready for modeling and can be downloaded as Excel.
-            """)
+                if show_explanations:
+                    st.markdown("**Explanation:** KMeans grouped flood events into clusters based on numeric severity variables.")
+            
+            except Exception as e:
+                st.error(f"❌ KMeans clustering failed: {e}")
 
         # ------------------------------
         # Monthly flood probability (fixed)
@@ -702,6 +711,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
