@@ -59,16 +59,25 @@ def _find_col(df, candidate_lower):
             return c
     return None
 
-def load_and_basic_clean(df):
-    def fill_zero_with_median(series):
+def fill_zero_with_median(series):
     """Replace zeros and NaNs with median of non-zero values."""
     series = pd.to_numeric(series, errors='coerce')
     non_zero = series[series != 0]
     median_val = non_zero.median() if len(non_zero) > 0 else 0
-    # Replace 0 and NaN with median
-   series.replace(0, median_val).fillna(median_val)
- return s
-    # Canonical column mapping
+    return series.replace(0, median_val).fillna(median_val)
+
+def load_and_basic_clean(df):
+    df = df.copy()
+    df.columns = [c.strip() for c in df.columns]
+
+    # Helper to find column names
+    def _find_col(df, candidate_lower):
+        for c in df.columns:
+            if c.strip().lower() == candidate_lower:
+                return c
+        return None
+
+    # Map canonical names
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -83,65 +92,58 @@ def load_and_basic_clean(df):
     }
 
     # Copy found columns into canonical names
-    for key, col in col_map.items():
-        if col is not None:
-            if key == 'year':
-                df['Year'] = df[col]
-            elif key == 'month':
-                df['Month'] = df[col].astype(str).str.strip()
-            elif key == 'month_num':
-                df['Month_Num'] = df[col]
-            elif key == 'day':
-                df['Day'] = df[col]
-            elif key == 'water_level':
-                df['Water Level'] = df[col]
-            elif key == 'families':
-                df['No. of Families affected'] = df[col]
-            elif key == 'damage_infra':
-                df['Damage Infrastructure'] = df[col]
-            elif key == 'damage_agri':
-                df['Damage Agriculture'] = df[col]
-            elif key == 'municipality':
-                df['Municipality'] = df[col]
-            elif key == 'barangay':
-                df['Barangay'] = df[col]
+    if col_map['year']: df['Year'] = df[col_map['year']]
+    if col_map['month']: df['Month'] = df[col_map['month']].astype(str).str.strip()
+    if col_map['month_num']: df['Month_Num'] = df[col_map['month_num']]
+    if col_map['day']: df['Day'] = df[col_map['day']]
+    if col_map['water_level']: df['Water Level'] = df[col_map['water_level']]
+    if col_map['families']: df['No. of Families affected'] = df[col_map['families']]
+    if col_map['damage_infra']: df['Damage Infrastructure'] = df[col_map['damage_infra']]
+    if col_map['damage_agri']: df['Damage Agriculture'] = df[col_map['damage_agri']]
+    if col_map['municipality']: df['Municipality'] = df[col_map['municipality']]
+    if col_map['barangay']: df['Barangay'] = df[col_map['barangay']]
 
-    # Standardize Month to uppercase
+    # Standardize Month
     if 'Month' in df.columns:
-        df['Month'] = df['Month'].astype(str).str.upper().replace({'NAN': pd.NA})
+        df['Month'] = df['Month'].str.upper().replace({'NAN': pd.NA})
 
-    # Map Month names to numbers if missing
-    month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
-                 'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
+    # Map Month to Month_Num if missing
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
+        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # ------------------ CLEAN NUMERIC COLUMNS ------------------
-    # Water Level
+    # Clean Water Level
     if 'Water Level' in df.columns:
-        df['Water Level'] = clean_water_level(df['Water Level'])
-        df['Water Level'] = fill_zero_with_median(df['Water Level'])
+        df['Water Level'] = pd.to_numeric(
+            df['Water Level'].astype(str).str.replace(' ft.', '').str.replace(' ft','').str.replace('ft','').str.strip().replace('nan', pd.NA),
+            errors='coerce'
+        )
+        if df['Water Level'].notna().sum() > 0:
+            df['Water Level'] = fill_zero_with_median(df['Water Level'])
 
-    # No. of Families affected
+    # Clean No. of Families affected
     if 'No. of Families affected' in df.columns:
         df['No. of Families affected'] = pd.to_numeric(
             df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce'
         )
-        df['No. of Families affected'] = fill_zero_with_median(df['No. of Families affected'])
+        if df['No. of Families affected'].notna().sum() > 0:
+            df['No. of Families affected'] = fill_zero_with_median(df['No. of Families affected'])
 
-    # Damage columns
+    # Clean Damage columns
     for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
-            df[col] = clean_damage_col(df[col])
-            df[col] = fill_zero_with_median(df[col])
+            s = df[col].astype(str).str.replace(',', '').str.replace(r'(\d)\.(\d)\.(\d)', lambda m: m.group(1)+m.group(2)+m.group(3), regex=True)
+            s = pd.to_numeric(s, errors='coerce')
+            df[col] = fill_zero_with_median(s)
 
-    # Ensure Year/Month_Num/Day are numeric
+    # Ensure numeric date columns
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors='coerce').ffill().bfill()
+            df[c] = pd.to_numeric(df[c], errors='coerce')
+            df[c] = df[c].ffill().bfill()
 
     return df
-
 
 def create_datetime_index(df):
     """
@@ -835,6 +837,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
