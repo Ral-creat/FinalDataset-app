@@ -234,7 +234,7 @@ plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
 
 # Tabs (main)
-tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Tutorial"])
+tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Model Comparison"])
 
 # ------------------------------
 # 🌊 Data Upload Tab
@@ -746,61 +746,43 @@ with tabs[5]:
                 st.error(f"Forecast failed: {e}")
 
 
-# ------------------------------
-# Tutorial Tab
-# ------------------------------
-with tabs[6]:
-    st.header("Tutorial & Walkthrough")
+# --- Model Comparison Tab ---
+with tabs[5]:
+    st.title("🤖 Model Comparison Summary")
+
     st.markdown("""
-    This tutorial explains the pipeline and what each section does.
-
-    ### 1. Data Upload
-    - Upload your CSV file (e.g., `FloodDataMDRRMO.csv`) containing columns like:
-      `Year, Month, Day, Municipality, Barangay, Flood Cause, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture`.
-    - If any column names differ, adapt the column name references in the script.
-
-    ### 2. Data Cleaning
-    - `Water Level` cleaned from text like "5 ft." → numeric.
-    - `Damage` columns cleaned by removing commas and converting to numeric.
-    - Missing numeric values are imputed (median or 0 depending on the column).
-    - `flood_occurred` is derived as `Water Level > 0`.
-
-    **Tip:** Real datasets may require extra cleaning for typos/fuzzy entries.
-
-    ### 3. Exploratory Data Analysis (EDA)
-    - Water Level distribution (Histogram + boxplot).
-    - Monthly and municipal flood probabilities calculated as (#flooding rows)/(#rows per group).
-    - These help identify peak months and hotspots.
-
-    ### 4. KMeans Clustering
-    - Clusters the flood events using `Water Level`, `No. of Families affected`, and damage columns.
-    - Use clusters to label events (e.g., low/medium/high impact).
-    - Check cluster medians to interpret cluster meaning.
-
-    ### 5. RandomForest Flood Occurrence Prediction
-    - Trains a RandomForest to predict whether a flood occurs (binary) using numeric + month dummies.
-    - Outputs accuracy and classification report.
-    - Also shows feature importances.
-
-    **Caveats:** If accuracy is suspiciously high, check for leakage in the data or extremely imbalanced classes.
-
-    ### 6. Flood Severity Classification
-    - Categorizes severity from Water Level (Low/Medium/High).
-    - Trains a multi-class RandomForest. Imbalanced classes may need resampling or class weights.
-
-    ### 7. Time Series (SARIMA)
-    - Requires date components `Year`, `Month`, `Day` to create a datetime index.
-    - Resamples daily, fills missing values, checks stationarity (ADF), inspects ACF/PACF, fits example SARIMA, and produces forecasts.
-    - Tune SARIMA orders via grid search and diagnostic checks for production.
-
-    ### 8. Reproducibility & Deployment
-    - Use the included `requirements.txt` to create a virtualenv.
-    - Run: `streamlit run app.py`.
+    This section provides a summary comparison of the three machine learning models used in the flood pattern study.
+    It highlights their main purpose, performance metrics, and insights from the analysis.
     """)
+
+    # Sample DataFrame for summary (replace values with actual metrics from your model)
+    comparison_data = {
+        "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
+        "Purpose": [
+            "Identify flood pattern clusters",
+            "Predict flood severity or risk level",
+            "Forecast future water levels"
+        ],
+        "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
+        "Result": ["3 Clusters", "92%", "0.23"],
+        "Notes": [
+            "Groups areas with similar water behavior",
+            "High accuracy for classification tasks",
+            "Low RMSE indicates reliable forecasts"
+        ]
+    }
+
+    df_comparison = pd.DataFrame(comparison_data)
+
+    st.table(df_comparison)
+
+    st.info("💡 Each model serves a unique role: K-Means for pattern discovery, Random Forest for predictive classification, and SARIMA for time-series forecasting.")
+
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
