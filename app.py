@@ -233,8 +233,16 @@ use_example = st.sidebar.checkbox("Use example dataset (if no upload)", value=Fa
 plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index=0)
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
 
-# Tabs (main)
-tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Tutorial"])
+tabs = st.tabs([
+    "Data Upload",
+    "Data Cleaning & EDA",
+    "Clustering (KMeans)",
+    "Flood Prediction (RF)",
+    "Flood Severity",
+    "Time Series (SARIMA)",
+    "Comparative Analysis",  # <-- new tab
+    "Tutorial"
+])
 
 # ------------------------------
 # 🌊 Data Upload Tab
@@ -794,6 +802,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
