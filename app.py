@@ -234,7 +234,7 @@ plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
 
 # Tabs (main)
-tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Comparative Analysis"])
+tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Tutorial"])
 
 # ------------------------------
 # 🌊 Data Upload Tab
@@ -784,46 +784,58 @@ with tabs[5]:
             except Exception as e:
                 st.error(f"Forecast failed: {e}")
 
+
 # ------------------------------
-# Comparative Analysis Tab (replaces Tutorial)
+# Tutorial Tab
 # ------------------------------
 with tabs[6]:
-    st.header("Comparative Analysis — Multiple ML Models")
-    if 'df' not in locals():
-        st.warning("Do data cleaning first.")
-    else:
-        st.markdown("""
-        This section compares the performance of multiple machine learning models 
-        on predicting `flood_occurred` using the same features.
+    st.header("Tutorial & Walkthrough")
+    st.markdown("""
+    This tutorial explains the pipeline and what each section does.
 
-        Steps:
-        1. All models trained on the same features and target.
-        2. Metrics (Accuracy, Precision, Recall, F1-Score) shown in a table.
-        3. Feature importance or insights discussed.
-        """)
+    ### 1. Data Upload
+    - Upload your CSV file (e.g., `FloodDataMDRRMO.csv`) containing columns like:
+      `Year, Month, Day, Municipality, Barangay, Flood Cause, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture`.
+    - If any column names differ, adapt the column name references in the script.
 
-        # Example comparison table (replace with actual model results if available)
-        comparison_df = pd.DataFrame({
-            "Model": ["RandomForest", "KMeans", "Time Serie, SARIMA"],
-            "Accuracy": [0.87, 0.81, 0.79],
-            "Precision": [0.85, 0.78, 0.76],
-            "Recall": [0.88, 0.80, 0.77],
-            "F1-Score": [0.86, 0.79, 0.76]
-        })
+    ### 2. Data Cleaning
+    - `Water Level` cleaned from text like "5 ft." → numeric.
+    - `Damage` columns cleaned by removing commas and converting to numeric.
+    - Missing numeric values are imputed (median or 0 depending on the column).
+    - `flood_occurred` is derived as `Water Level > 0`.
 
-        st.subheader("📊 Model Performance Comparison")
-        st.table(comparison_df)
+    **Tip:** Real datasets may require extra cleaning for typos/fuzzy entries.
 
-        if show_explanations:
-            st.markdown("""
-            **Explanation:**  
-            This table allows you to quickly compare model performance.  
-            RandomForest often performs best on structured flood datasets, but simpler models can be considered for speed or interpretability.
-            """)
+    ### 3. Exploratory Data Analysis (EDA)
+    - Water Level distribution (Histogram + boxplot).
+    - Monthly and municipal flood probabilities calculated as (#flooding rows)/(#rows per group).
+    - These help identify peak months and hotspots.
 
+    ### 4. KMeans Clustering
+    - Clusters the flood events using `Water Level`, `No. of Families affected`, and damage columns.
+    - Use clusters to label events (e.g., low/medium/high impact).
+    - Check cluster medians to interpret cluster meaning.
 
+    ### 5. RandomForest Flood Occurrence Prediction
+    - Trains a RandomForest to predict whether a flood occurs (binary) using numeric + month dummies.
+    - Outputs accuracy and classification report.
+    - Also shows feature importances.
 
+    **Caveats:** If accuracy is suspiciously high, check for leakage in the data or extremely imbalanced classes.
 
+    ### 6. Flood Severity Classification
+    - Categorizes severity from Water Level (Low/Medium/High).
+    - Trains a multi-class RandomForest. Imbalanced classes may need resampling or class weights.
+
+    ### 7. Time Series (SARIMA)
+    - Requires date components `Year`, `Month`, `Day` to create a datetime index.
+    - Resamples daily, fills missing values, checks stationarity (ADF), inspects ACF/PACF, fits example SARIMA, and produces forecasts.
+    - Tune SARIMA orders via grid search and diagnostic checks for production.
+
+    ### 8. Reproducibility & Deployment
+    - Use the included `requirements.txt` to create a virtualenv.
+    - Run: `streamlit run app.py`.
+    """)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
