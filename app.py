@@ -335,7 +335,7 @@ with tabs[1]:
         with st.expander("🔍 View Raw Data after filling (first 50 rows)"):  
             st.dataframe(df_filled.head(50), use_container_width=True)  
 
-   # --- 6️⃣ Water Level distribution ---
+  # --- 6️⃣ Water Level distribution ---
 if 'Water Level' in df_filled.columns:
     st.subheader("Water Level distribution (percentage)")
 
@@ -353,44 +353,65 @@ if 'Water Level' in df_filled.columns:
 
     st.plotly_chart(fig, use_container_width=True)
 
+# --- Monthly Flood Probability ---
+if 'Month' in df_filled.columns:
+    # create flood_occurred column if not exists
+    if 'flood_occurred' not in df_filled.columns:
+        df_filled['flood_occurred'] = (df_filled['Water Level'].fillna(0) > 0).astype(int)
 
-        # --- 7️⃣ Monthly Flood Probability ---  
-        if 'Month' in df_filled.columns:  
-            if 'flood_occurred' not in df_filled.columns:  
-                df_filled['flood_occurred'] = (df_filled['Water Level'] > 0).astype(int)  
+    st.subheader("Monthly Flood Probability")
 
-            st.subheader("Monthly Flood Probability")  
+    # month mapping
+    month_map = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April',
+        5: 'May', 6: 'June', 7: 'July', 8: 'August',
+        9: 'September', 10: 'October', 11: 'November', 12: 'December'
+    }
 
-            month_map = {  
-                1: 'January', 2: 'February', 3: 'March', 4: 'April',  
-                5: 'May', 6: 'June', 7: 'July', 8: 'August',  
-                9: 'September', 10: 'October', 11: 'November', 12: 'December'  
-            }  
+    # clean and convert month formats
+    def clean_month(val):
+        try:
+            val_str = str(val).strip().lower()
+            if val_str.isdigit():
+                num = int(val_str)
+                return month_map.get(num, np.nan)
+            for num, name in month_map.items():
+                if val_str.startswith(name[:3].lower()):
+                    return name
+            return np.nan
+        except:
+            return np.nan
 
-            def clean_month(val):  
-                try:  
-                    val_str = str(val).strip().lower()  
-                    if val_str.isdigit():  
-                        return month_map.get(int(val_str), np.nan)  
-                    for num, name in month_map.items():  
-                        if val_str.startswith(name[:3].lower()):  
-                            return name  
-                    return np.nan  
-                except:  
-                    return np.nan  
+    df_filled['Month_clean'] = df_filled['Month'].apply(clean_month)
+    df_filled = df_filled.dropna(subset=['Month_clean'])
 
-            df_filled['Month_clean'] = df_filled['Month'].apply(clean_month)  
-            df_filled = df_filled.dropna(subset=['Month_clean'])  
+    # compute monthly stats
+    m_stats = df_filled.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
+    m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
 
-            m_stats = df_filled.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()  
-            m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)  
+    # keep months in correct order
+    m_stats['Month_clean'] = pd.Categorical(
+        m_stats['Month_clean'],
+        categories=list(month_map.values()),
+        ordered=True
+    )
+    m_stats = m_stats.sort_values('Month_clean')
 
-            m_stats['Month_clean'] = pd.Categorical(m_stats['Month_clean'], categories=list(month_map.values()), ordered=True)  
-            m_stats = m_stats.sort_values('Month_clean')  
+    # bar chart
+    fig = px.bar(
+        m_stats,
+        x='Month_clean',
+        y='probability',
+        title="Flood Probability by Month",
+        text='probability'
+    )
+    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
 
-            fig = px.bar(m_stats, x='Month_clean', y='probability', text='probability', title="Flood Probability by Month")  
-            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')  
-            st.plotly_chart(fig, use_container_width=True)  
+    st.plotly_chart(fig, use_container_width=True)
+
+
+        # ---
 
         # --- 8️⃣ Municipality flood probabilities ---  
         if 'Municipality' in df_filled.columns:  
@@ -799,6 +820,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
