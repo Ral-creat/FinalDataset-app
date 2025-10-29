@@ -300,46 +300,40 @@ with tabs[0]:
         st.table(col_df)
 
 # ------------------------------
-# Cleaning & EDA
+# Cleaning & EDA Tab
 # ------------------------------
 with tabs[1]:
-    st.header("🧹 Data Cleaning & EDA")
-    df_raw = st.session_state.get('df_raw', None)
-    if df_raw is None:
-        st.warning("Please upload a dataset first.")
+    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
+    if 'df_raw' not in locals():
+        st.warning("Upload a dataset first in the Data Upload tab.")
     else:
-        df = df_raw.copy()
+        df = load_and_basic_clean(df_raw)
+        st.subheader("After basic cleaning (head):")
+        st.dataframe(df.head(10))
 
-        # Clean numeric columns
-        for col in ['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']:
-            if col in df.columns:
-                df[col] = clean_numeric(df[col])
+        # Basic stats
+        st.subheader("Summary statistics (numerical):")
+        st.write(df.select_dtypes(include=[np.number]).describe())
 
-        # Fill median automatically
-        df_filled = fill_median(df)
-
-        # Store the processed dataset for ML models
-        st.session_state['df_processed'] = df_filled
-
-        # Show Raw Data
-        st.subheader("📘 Raw Dataset (Before Median Filling)")
-        st.dataframe(df.head(20), use_container_width=True)
-
-        # Show Median-Filled Data
-        st.subheader("📗 Processed Dataset (After Median Filling)")
-        st.dataframe(df_filled.head(20), use_container_width=True)
-
-        # Quick summary
-        st.markdown("### 🧾 Quick Summary (Numeric Columns)")
-        st.dataframe(df_filled.describe().round(2))
-
-        if show_explanations:
-            st.markdown("""
-            **Explanation:**  
-            - All numeric columns automatically cleaned and filled using median values.  
-            - Zero and missing values are replaced with the column's median.  
-            - This ensures models don’t fail due to missing or invalid data.
-            """)
+        # Water Level distribution (Plotly)
+        if 'Water Level' in df.columns:
+            st.subheader("Water Level distribution")
+            fig = px.histogram(
+                df,
+                x='Water Level',
+                nbins=30,
+                marginal="box",
+                title="Distribution of Cleaned Water Level"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
+                and filling missing values with the median.  
+                The boxplot margin highlights potential outliers.  
+                Use this to detect skew and extreme flood events.
+                """)
 
         # ------------------------------
         # Monthly flood probability (fixed)
@@ -846,4 +840,3 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
-
