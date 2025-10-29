@@ -322,9 +322,9 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")  
         st.write(df_filled.select_dtypes(include=[np.number]).describe())  
 
-        # --- 4️⃣ Water Level distribution (scaled counts 0-2) ---  
+        # --- 4️⃣ Water Level distribution (scaled counts 0-1) ---  
         if 'Water Level' in df_filled.columns:  
-            st.subheader("Water Level distribution (scaled count 0-2)")  
+            st.subheader("Water Level distribution (scaled count 0-1)")  
             fig = px.histogram(  
                 df_filled,  
                 x='Water Level',  
@@ -333,12 +333,12 @@ with tabs[1]:
                 histnorm='probability',  # normalize counts 0-1  
                 title="Distribution of Cleaned Water Level"  
             )  
-            fig.update_yaxes(title_text="Count (scaled 0-2)", range=[0,2], tickvals=[0,0.5,1,1.5,2])  
+            fig.update_yaxes(title_text="Count (scaled 0-1)", range=[0,1], tickvals=[0,0.5,1,1.5,2])  
             st.plotly_chart(fig, use_container_width=True)  
             if show_explanations:  
                 st.markdown("""  
                 **Explanation:** Histogram shows `Water Level` after cleaning and zero/median imputation.  
-                Counts are scaled 0–2 for easier visualization.  
+                Counts are scaled 0–1 for easier visualization.  
                 Boxplot margin highlights potential outliers.  
                 """)  
 
@@ -785,4 +785,5 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
