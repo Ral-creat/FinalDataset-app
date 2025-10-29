@@ -308,20 +308,28 @@ with tabs[1]:
     if 'df_raw' not in locals():  
         st.warning("Upload a dataset first in the Data Upload tab.")  
     else:  
-        # --- 1️⃣ Clean & fill missing values ---  
-        df_filled = load_and_basic_clean(df_raw)  
+        # --- 1️⃣ Basic cleaning (original) ---  
+        df = load_and_basic_clean(df_raw)  
 
-        st.subheader("After basic cleaning (first 10 rows):")  
-        st.dataframe(df_filled.head(10), use_container_width=True)  
+        # --- 2️⃣ Fill missing / zero values with median ---  
+        def fill_missing_with_median(df_in):  
+            df_filled = df_in.copy()  
+            numeric_cols = df_filled.select_dtypes(include=[np.number]).columns  
+            for col in numeric_cols:  
+                median_val = df_filled.loc[df_filled[col] != 0, col].median()  # ignore zeros for median  
+                df_filled[col] = df_filled[col].replace(0, np.nan)  # treat zeros as missing  
+                df_filled[col] = df_filled[col].fillna(median_val)  
+            return df_filled  
 
-        # --- 2️⃣ Raw Data Preview (filled zeros & median) ---  
-        with st.expander("🔍 View cleaned & filled data (first 20 rows)"):  
-            st.dataframe(df_filled.head(20), use_container_width=True)  
+        df_filled = fill_missing_with_median(df)  
 
-        # --- 3️⃣ Summary statistics ---  
-        st.subheader("Summary statistics (numerical):")  
-        st.write(df_filled.select_dtypes(include=[np.number]).describe())  
+        # --- 3️⃣ Display first few rows ---  
+        st.subheader("After cleaning & filling missing/zero values (head)")  
+        st.dataframe(df_filled.head(10))  
 
+        # --- 4️⃣ Summary statistics ---  
+        st.subheader("Summary statistics (numerical)")  
+        st.write(df_filled.select_dtypes(include=[np.number]).describe()) 
         # --- 4️⃣ Water Level distribution (scaled counts 0-2) ---  
         if 'Water Level' in df_filled.columns:  
             st.subheader("Water Level distribution (scaled count 0-2)")  
@@ -783,6 +791,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
