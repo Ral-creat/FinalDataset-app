@@ -63,10 +63,12 @@ def load_and_basic_clean(df):
     # Work on a copy
     df = df.copy()
 
-    # Normalize whitespace in column names
+    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
     df.columns = [c.strip() for c in df.columns]
 
-    # Canonical column mapping
+    # Create canonical column names (if any variant exists)
+    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
+    # The rest of your app expects those canonical names.
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -77,63 +79,145 @@ def load_and_basic_clean(df):
         'damage_infra': _find_col(df, 'damage infrastructure'),
         'damage_agri': _find_col(df, 'damage agriculture'),
         'municipality': _find_col(df, 'municipality'),
-        'barangay': _find_col(df, 'barangay'),
-        'flood_cause': _find_col(df, 'flood cause')
+        'barangay': _find_col(df, 'barangay')
     }
 
-    # Copy found columns to canonical names
-    for key, val in col_map.items():
-        if val is not None:
-            df_name = key.replace('_', ' ').title()
-            df[df_name] = df[val]
+    # Copy found columns into canonical names (only if found)
+    if col_map['year'] is not None:
+        df['Year'] = df[col_map['year']]
+    if col_map['month'] is not None:
+        df['Month'] = df[col_map['month']].astype(str).str.strip()
+    if col_map['month_num'] is not None:
+        df['Month_Num'] = df[col_map['month_num']]
+    if col_map['day'] is not None:
+        df['Day'] = df[col_map['day']]
+    if col_map['water_level'] is not None:
+        df['Water Level'] = df[col_map['water_level']]
+    if col_map['families'] is not None:
+        df['No. of Families affected'] = df[col_map['families']]
+    if col_map['damage_infra'] is not None:
+        df['Damage Infrastructure'] = df[col_map['damage_infra']]
+    if col_map['damage_agri'] is not None:
+        df['Damage Agriculture'] = df[col_map['damage_agri']]
+    if col_map['municipality'] is not None:
+        df['Municipality'] = df[col_map['municipality']]
+    if col_map['barangay'] is not None:
+        df['Barangay'] = df[col_map['barangay']]
 
-    # Standardize Month
+    # Standardize Month to uppercase names if exists
     if 'Month' in df.columns:
         df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
 
-    # Map Month names to numbers if needed
-    month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
-                 'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
+    # If Month_Num wasn't provided but Month names are, map names to numbers
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
+        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean numeric columns
+    # Clean water level if present
     if 'Water Level' in df.columns:
         df['Water Level'] = clean_water_level(df['Water Level'])
-    for col in ['No. of Families affected','Damage Infrastructure','Damage Agriculture']:
+        # If too many missing, leave them but otherwise impute with median
+        if df['Water Level'].notna().sum() > 0:
+            median_wl = df['Water Level'].median()
+            df['Water Level'] = df['Water Level'].fillna(median_wl)
+
+    # Families affected
+    if 'No. of Families affected' in df.columns:
+        df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
+        if df['No. of Families affected'].notna().sum() > 0:
+            df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
+
+    # Damage columns
+    for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
             df[col] = clean_damage_col(df[col])
+            df[col] = df[col].fillna(0)
 
-    # Convert Year/Month_Num/Day to numeric
+    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
 
-    # Fill small gaps in date columns
+    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
+    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
+            # attempt forward then backward fill but only for short gaps
             df[c] = df[c].ffill().bfill()
-
-    # -------------------------------
-    # MISSING VALUE IMPUTATION
-    # -------------------------------
-
-    # Numeric columns: median
-    numeric_cols = ['Water Level','No. of Families affected','Damage Infrastructure','Damage Agriculture']
-    for col in numeric_cols:
-        if col in df.columns:
-            median_val = df[col].median()
-            df[col] = df[col].fillna(median_val)
-
-    # Categorical columns: mode
-    cat_cols = ['Municipality','Barangay','Flood Cause','Month']
-    for col in cat_cols:
-        if col in df.columns:
-            mode_val = df[col].mode()[0]
-            df[col] = df[col].fillna(mode_val)
 
     return df
 
+def create_datetime_index(df):
+    """
+    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
+    Returns a dataframe with a Date index if possible; otherwise returns the original df.
+    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
+    and avoids integer-casting errors by using pd.to_datetime with dict input.
+    """
+    tmp = df.copy()
+
+    # If Month exists but Month_Num doesn't, try mapping (safe)
+    if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
+        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
+                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
+        tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
+
+    # Ensure we have at least Year and something for month/day
+    if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
+        # Not enough parts to build a date index
+        return df
+
+    # Coerce to numeric, leaving invalid as NaN
+    tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
+    tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
+    tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
+
+    # Drop rows where essential parts are missing - can't build a date
+    before = len(tmp)
+    tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
+    dropped = before - len(tmp)
+    if dropped > 0:
+        st.info(f"Dropped {dropped} rows with missing Year/Month/Day parts which couldn't form valid dates.")
+
+    if tmp.empty:
+        return df
+
+    # Convert to integer where safe
+    # (they're floats because of NaNs; cast after dropping NaNs)
+    tmp['Year'] = tmp['Year'].astype(int)
+    tmp['Month_Num'] = tmp['Month_Num'].astype(int)
+    tmp['Day'] = tmp['Day'].astype(int)
+
+    # Now build Date column using dict -> safe assembly
+    tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
+
+    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
+    before2 = len(tmp)
+    tmp = tmp.dropna(subset=['Date']).copy()
+    dropped2 = before2 - len(tmp)
+    if dropped2 > 0:
+        st.info(f"Dropped {dropped2} rows with invalid date combinations (e.g., Feb 30).")
+
+    if tmp.empty:
+        return df
+
+    tmp = tmp.set_index('Date').sort_index()
+    return tmp
+
+def categorize_severity(w):
+    if pd.isna(w):
+        return 'Unknown'
+    try:
+        w = float(w)
+    except:
+        return 'Unknown'
+    if w <= 5:
+        return 'Low'
+    elif 5 < w <= 15:
+        return 'Medium'
+    else:
+        return 'High'
 
 # ------------------------------
 # UI Layout
@@ -215,42 +299,48 @@ with tabs[0]:
         })
         st.table(col_df)
 
-# ------------------------------
-# Cleaning & EDA Tab
-# ------------------------------
-with tabs[1]:
-    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")
-    if 'df_raw' not in locals():
-        st.warning("Upload a dataset first in the Data Upload tab.")
-    else:
-        df = load_and_basic_clean(df_raw)
-        st.subheader("After basic cleaning (head):")
-        st.dataframe(df.head(10))
+# ------------------------------  
+# Cleaning & EDA Tab (Complete)  
+# ------------------------------  
+with tabs[1]:  
+    st.header("Data Cleaning & Exploratory Data Analysis (EDA)")  
 
-        # Basic stats
-        st.subheader("Summary statistics (numerical):")
-        st.write(df.select_dtypes(include=[np.number]).describe())
+    if 'df_raw' not in locals():  
+        st.warning("Upload a dataset first in the Data Upload tab.")  
+    else:  
+        # --- 1️⃣ Clean & fill missing values ---  
+        df_filled = load_and_basic_clean(df_raw)  
 
-        # Water Level distribution (Plotly)
-        if 'Water Level' in df.columns:
-            st.subheader("Water Level distribution")
-            fig = px.histogram(
-                df,
-                x='Water Level',
-                nbins=30,
-                marginal="box",
-                title="Distribution of Cleaned Water Level"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-                and filling missing values with the median.  
-                The boxplot margin highlights potential outliers.  
-                Use this to detect skew and extreme flood events.
-                """)
+        st.subheader("After basic cleaning (first 20 rows):")  
+        st.dataframe(df_filled.head(20), use_container_width=True)  
 
+        # --- 2️⃣ Raw Data Preview (filled zeros & median) ---  
+        with st.expander("🔍 View cleaned & filled data (first 20 rows)"):  
+            st.dataframe(df_filled.head(20), use_container_width=True)  
+
+        # --- 3️⃣ Summary statistics ---  
+        st.subheader("Summary statistics (numerical):")  
+        st.write(df_filled.select_dtypes(include=[np.number]).describe())  
+
+        # --- 4️⃣ Water Level distribution (scaled counts 0-1) ---  
+        if 'Water Level' in df_filled.columns:  
+            st.subheader("Water Level distribution (scaled count 0-1)")  
+            fig = px.histogram(  
+                df_filled,  
+                x='Water Level',  
+                nbins=30,  
+                marginal="box",  
+                histnorm='probability',  # normalize counts 0-1  
+                title="Distribution of Cleaned Water Level"  
+            )  
+            fig.update_yaxes(title_text="Count (scaled 0-1)", range=[0,1], tickvals=[0,0.5,1,1.5,2])  
+            st.plotly_chart(fig, use_container_width=True)  
+            if show_explanations:  
+                st.markdown("""  
+                **Explanation:** Histogram shows `Water Level` after cleaning and zero/median imputation.  
+                Counts are scaled 0–1 for easier visualization.  
+                Boxplot margin highlights potential outliers.  
+                """)  
         # ------------------------------
         # Monthly flood probability (fixed)
         # ------------------------------
@@ -756,5 +846,3 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
-
-
