@@ -135,77 +135,6 @@ def load_and_basic_clean(df):
     return df
 
 
-def create_datetime_index(df):
-    """
-    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
-    Returns a dataframe with a Date index if possible; otherwise returns the original df.
-    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
-    and avoids integer-casting errors by using pd.to_datetime with dict input.
-    """
-    tmp = df.copy()
-
-    # If Month exists but Month_Num doesn't, try mapping (safe)
-    if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
-        month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
-                     'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
-        tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
-
-    # Ensure we have at least Year and something for month/day
-    if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
-        # Not enough parts to build a date index
-        return df
-
-    # Coerce to numeric, leaving invalid as NaN
-    tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
-    tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
-    tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
-
-    # Drop rows where essential parts are missing - can't build a date
-    before = len(tmp)
-    tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
-    dropped = before - len(tmp)
-    if dropped > 0:
-        st.info(f"Dropped {dropped} rows with missing Year/Month/Day parts which couldn't form valid dates.")
-
-    if tmp.empty:
-        return df
-
-    # Convert to integer where safe
-    # (they're floats because of NaNs; cast after dropping NaNs)
-    tmp['Year'] = tmp['Year'].astype(int)
-    tmp['Month_Num'] = tmp['Month_Num'].astype(int)
-    tmp['Day'] = tmp['Day'].astype(int)
-
-    # Now build Date column using dict -> safe assembly
-    tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
-
-    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
-    before2 = len(tmp)
-    tmp = tmp.dropna(subset=['Date']).copy()
-    dropped2 = before2 - len(tmp)
-    if dropped2 > 0:
-        st.info(f"Dropped {dropped2} rows with invalid date combinations (e.g., Feb 30).")
-
-    if tmp.empty:
-        return df
-
-    tmp = tmp.set_index('Date').sort_index()
-    return tmp
-
-def categorize_severity(w):
-    if pd.isna(w):
-        return 'Unknown'
-    try:
-        w = float(w)
-    except:
-        return 'Unknown'
-    if w <= 5:
-        return 'Low'
-    elif 5 < w <= 15:
-        return 'Medium'
-    else:
-        return 'High'
-
 # ------------------------------
 # UI Layout
 # ------------------------------
@@ -827,4 +756,5 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
