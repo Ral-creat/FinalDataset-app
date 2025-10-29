@@ -288,8 +288,8 @@ with tabs[0]:
             st.metric("📈 Total Columns", f"{df_raw.shape[1]}")
 
         # --- 4️⃣ Raw Data Preview (Expandable) ---
-        with st.expander("🔍 View Raw Data (First 20 Rows)"):
-            st.dataframe(df_raw.head(20), use_container_width=True)
+        with st.expander("🔍 View Raw Data (First 50 Rows)"):
+            st.dataframe(df_raw.head(50), use_container_width=True)
 
         # --- 5️⃣ Column List ---
         st.markdown("### 🧩 Column Names")
@@ -791,6 +791,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
