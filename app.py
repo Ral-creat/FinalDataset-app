@@ -335,7 +335,7 @@ with tabs[1]:
         with st.expander("🔍 View Raw Data after filling (first 50 rows)"):  
             st.dataframe(df_filled.head(50), use_container_width=True)  
 
-       # --- 6️⃣ Water Level distribution ---  
+      # --- 6️⃣ Water Level distribution ---  
 if 'Water Level' in df_filled.columns:  
     st.subheader("Water Level distribution")  
     
@@ -348,16 +348,18 @@ if 'Water Level' in df_filled.columns:
         nbins=30,
         marginal="box",
         title="Distribution of Cleaned Water Level",
-        histnorm='percent'  # <-- shows percentage on y-axis
+        histnorm='percent'  # shows percentage on y-axis
     )
 
     # Set X-axis range 0–2
     fig.update_xaxes(range=[0, 2])
-
-    # Optional: format Y-axis as %
     fig.update_yaxes(title_text="Percentage (%)")
 
     st.plotly_chart(fig, use_container_width=True)
+
+# Now next section should NOT be indented more than this
+if 'Month' in df_filled.columns:
+    # ... rest of your code for month stats
 
 
         # --- 7️⃣ Monthly Flood Probability ---  
@@ -805,6 +807,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
