@@ -748,6 +748,54 @@ with tabs[5]:
             except Exception as e:
                 st.error(f"Forecast failed: {e}")
 # ------------------------------
+# Comparative Analysis Tab
+# ------------------------------
+with tabs[6]:  # index 6, because it's the 7th tab
+    st.header("📊 Comparative Analysis: KMeans vs RandomForest vs SARIMA")
+
+    if 'df' not in locals():
+        st.warning("Do data cleaning first.")
+    else:
+        st.markdown("Compare the three models side by side using tables and charts.")
+
+        # Create sub-tabs for each model
+        model_tabs = st.tabs(["KMeans", "RandomForest", "SARIMA"])
+
+        # --- KMeans ---
+        with model_tabs[0]:
+            st.subheader("KMeans Clustering Summary")
+            if 'Cluster' in df.columns:
+                cluster_summary = df.groupby('Cluster')[['Water Level','No. of Families affected','Damage Infrastructure','Damage Agriculture']].median()
+                st.dataframe(cluster_summary)
+                counts = df['Cluster'].value_counts().sort_index()
+                st.bar_chart(counts)
+            else:
+                st.info("Run KMeans clustering first.")
+
+        # --- RandomForest ---
+        with model_tabs[1]:
+            st.subheader("RandomForest Prediction Summary")
+            if 'flood_occurred' in df.columns:
+                st.dataframe(report_df)  # classification report from your RF tab
+                fi_chart = pd.DataFrame({'Feature': fi.index, 'Importance': fi.values})
+                st.bar_chart(fi_chart.set_index('Feature'))
+            else:
+                st.info("Run RandomForest prediction first.")
+
+        # --- SARIMA ---
+        with model_tabs[2]:
+            st.subheader("SARIMA Forecast Summary")
+            if results is not None:
+                st.dataframe(summary_df)
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=ts_filled.index, y=ts_filled, name='Observed'))
+                pred_mean = results.get_forecast(steps=30).predicted_mean
+                fig.add_trace(go.Scatter(x=pred_mean.index, y=pred_mean, name='Forecast'))
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Run SARIMA forecast first.")
+
+# ------------------------------
 # Tutorial Tab
 # ------------------------------
 with tabs[6]:
@@ -802,6 +850,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
