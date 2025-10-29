@@ -305,12 +305,6 @@ with tabs[0]:
 with tabs[1]:  
     st.header("Data Cleaning & Exploratory Data Analysis (EDA)")  
 
-    if 'df_raw' not in locals():  
-        st.warning("Upload a dataset first in the Data Upload tab.")  
-    else:  
-        # --- 1️⃣ Basic cleaning (original) ---  
-        df = load_and_basic_clean(df_raw)  
-
         # --- 2️⃣ Fill missing / zero values with median ---  
         def fill_missing_with_median(df_in):  
             df_filled = df_in.copy()  
@@ -331,9 +325,11 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical)")  
         st.write(df_filled.select_dtypes(include=[np.number]).describe())  
 
-        # --- 5️⃣ Raw Data expandable ---  
-        with st.expander("🔍 View Raw Data after filling (first 50 rows)"):  
-            st.dataframe(df_filled.head(50), use_container_width=True) 
+        if 'df_raw' not in locals():  
+        st.warning("Upload a dataset first in the Data Upload tab.")  
+    else:  
+        # --- 1️⃣ Basic cleaning (original) ---  
+        df = load_and_basic_clean(df_raw)  
 
         # --- 1️⃣ Water Level distribution ---
         if 'Water Level' in df_filled.columns:
@@ -816,6 +812,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
