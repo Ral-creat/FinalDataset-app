@@ -335,22 +335,20 @@ with tabs[1]:
         with st.expander("🔍 View Raw Data after filling (first 50 rows)"):  
             st.dataframe(df_filled.head(50), use_container_width=True)  
 
-     if 'Water Level' in df_filled.columns:  
-    st.subheader("Water Level distribution (percentage)")  
-
-    # compute percentage
-    df_filled['Water_Level_pct'] = df_filled['Water Level'] / df_filled['Water Level'].sum() * 100
+   # --- 6️⃣ Water Level distribution ---
+if 'Water Level' in df_filled.columns:
+    st.subheader("Water Level distribution (percentage)")
 
     fig = px.histogram(
         df_filled,
         x='Water Level',
         nbins=30,
-        histnorm='percent',  # normalize to percentage
+        histnorm='percent',  # show percentage instead of counts
         marginal="box",
         title="Distribution of Cleaned Water Level (Percentage)"
     )
 
-    # set y-axis scale 0 to 2%
+    # set y-axis from 0 to 2%
     fig.update_yaxes(title="Percentage (%)", range=[0, 2])
 
     st.plotly_chart(fig, use_container_width=True)
@@ -801,6 +799,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
