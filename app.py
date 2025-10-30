@@ -488,56 +488,7 @@ with tabs[3]:
 
         # Display header
         st.subheader("📊 Basic RandomForest Results")
-        # ------------------------------------
-        # 🔮 Monthly Flood Probability Forecast
-        # ------------------------------------
-        st.subheader("🌧️ Predicted Flood Probability per Month (RandomForest)")
-
-        # Use median of numerical features for simulation
-        median_values = X_basic[['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']].median().to_dict()
-
-        # Define all months for prediction
-        all_months = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
-                      'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER','Unknown']
-
-        # Build prediction data for each month
-        prediction_data = []
-        for month in all_months:
-            month_data = {f'Month_{m}': (m == month) for m in all_months}
-            month_data.update(median_values)
-            prediction_data.append(month_data)
-
-        prediction_df = pd.DataFrame(prediction_data)
-        prediction_df = prediction_df[X_basic.columns]  # same feature order
-
-        # Predict probabilities for class 1 (flood occurred)
-        monthly_probs = model.predict_proba(prediction_df)[:, 1]
-
-        monthly_df = pd.DataFrame({
-            'Month': all_months,
-            'Flood Probability': monthly_probs
-        }).sort_values('Flood Probability', ascending=False)
-
-        # Plot results
-        fig = px.bar(
-            monthly_df,
-            x='Month',
-            y='Flood Probability',
-            text='Flood Probability',
-            title="Predicted Flood Probability for Each Month"
-        )
-        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-        fig.update_layout(yaxis_range=[0,1])
-        st.plotly_chart(fig, use_container_width=True)
-
-        if show_explanations:
-            st.markdown("""
-            **Explanation:**  
-            This RandomForest-based prediction estimates the likelihood of flooding for each month,  
-            using median values of damage and water level data.  
-            Months with higher probabilities suggest higher risk based on historical patterns.
-            """)
-
+       
         # Accuracy table
         acc_table = pd.DataFrame({
             "Metric": ["Accuracy (test)"],
@@ -797,7 +748,7 @@ with tabs[5]:
 
 # --- Model Comparison Tab ---
 with tabs[5]:
-    st.title("🤖 Model Comparison Summary")
+    st.title(" Model Comparison Summary")
 
     st.markdown("""
     This section provides a summary comparison of the three machine learning models used in the flood pattern study.
@@ -831,6 +782,7 @@ with tabs[5]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
