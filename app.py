@@ -768,19 +768,17 @@ with tabs[5]:
 
 
 # ------------------------------
-# Model Comparison Tab
+# Model Comparison Tab (Visual Format)
 # ------------------------------
 with tabs[6]:
     st.title("📊 Model Comparison Summary")
 
     st.markdown("""
-    This section compares the **three machine learning models** used in the flood pattern study.  
-    It shows their **purpose**, **metrics**, **results**, and a **visual comparison** of performance.
+    This section visually compares the three machine learning models used in the flood pattern study.
+    Each column highlights the model’s goal, metric, and main findings — making it easier to spot their differences.
     """)
 
-    # --- Overview Table ---
-    st.subheader("📋 Summary Table")
-
+    # --- Comparison Table (same as before) ---
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -788,83 +786,31 @@ with tabs[6]:
             "Predict flood severity or risk level",
             "Forecast future water levels"
         ],
-        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"],
+        "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
         "Result": ["3 Clusters", "92%", "0.23"],
-        "Key Takeaways": [
-            "Groups areas with similar water behavior.",
-            "High accuracy in predicting flood risks.",
-            "Low RMSE means stable forecast performance."
+        "Notes": [
+            "Groups areas with similar water behavior",
+            "High accuracy for classification tasks",
+            "Low RMSE indicates reliable forecasts"
         ]
     }
 
     df_comparison = pd.DataFrame(comparison_data)
     st.table(df_comparison)
 
-    st.info("💡 Each model has a unique focus — K-Means for discovery, Random Forest for classification, and SARIMA for forecasting trends.")
-
-    # --- Visual Comparison (Chart + Table) ---
-    st.subheader("🎨 Visual Comparison of Model Results")
-
-    st.markdown("This visualization highlights how each model performed based on its primary metric.")
-
-    perf_data = pd.DataFrame({
-        "Model": ["K-Means", "Random Forest", "SARIMA"],
-        "Value": [3, 92, 0.23],
-        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
-    })
-
-    perf_data["Scaled"] = perf_data["Value"] / perf_data["Value"].max() * 100
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("#### 🔹 Normalized Comparison Chart")
-        fig = px.bar(
-            perf_data,
-            x="Model",
-            y="Scaled",
-            color="Model",
-            text="Value",
-            title="Performance by Model (Normalized)",
-            hover_data=["Metric"],
-            color_discrete_sequence=px.colors.qualitative.Vivid
-        )
-        fig.update_traces(texttemplate='%{text}', textposition='outside')
-        fig.update_layout(
-            yaxis_title="Normalized Scale (%)",
-            xaxis_title="Model",
-            showlegend=False
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        st.markdown("#### 🔹 Metric Comparison Table")
-        metric_table = pd.DataFrame({
-            "Model": ["K-Means", "Random Forest", "SARIMA"],
-            "Metric Type": ["Cluster Count", "Accuracy", "RMSE"],
-            "Performance": ["3 Clusters", "92%", "0.23"],
-            "Interpretation": [
-                "Shows how many flood behavior groups exist.",
-                "Higher accuracy = better flood risk prediction.",
-                "Lower RMSE = more reliable forecast."
-            ]
-        })
-        st.dataframe(metric_table, use_container_width=True)
-
-    st.caption("📎 Note: Metrics are scaled only for visualization clarity. Actual values are shown in tables.")
+    st.info("💡 Each model focuses on a different aspect: clustering, prediction, or forecasting — all working together for flood analysis.")
 
     # ------------------------------
     # Visual Comparison (Side-by-side)
     # ------------------------------
-    st.subheader("🧩 Visual Comparison of Each Model")
+    st.subheader("Visual Comparison of Each Model")
 
     col1, col2, col3 = st.columns(3)
 
     # --- K-Means Card ---
     with col1:
         st.markdown("""
-        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;
-        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
             <h3>🌀 K-Means Clustering</h3>
             <p><b>Purpose:</b> Identify flood pattern clusters</p>
             <p><b>Metric:</b> No. of Clusters</p>
@@ -877,8 +823,7 @@ with tabs[6]:
     # --- Random Forest Card ---
     with col2:
         st.markdown("""
-        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;
-        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
             <h3>🌳 Random Forest</h3>
             <p><b>Purpose:</b> Predict flood severity or risk level</p>
             <p><b>Metric:</b> Accuracy</p>
@@ -891,8 +836,7 @@ with tabs[6]:
     # --- SARIMA Card ---
     with col3:
         st.markdown("""
-        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;
-        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
             <h3>📈 SARIMA</h3>
             <p><b>Purpose:</b> Forecast future water levels</p>
             <p><b>Metric:</b> RMSE</p>
@@ -902,9 +846,45 @@ with tabs[6]:
         </div>
         """, unsafe_allow_html=True)
 
+    # ------------------------------
+    # Visual Graph Comparison
+    # ------------------------------
+    st.subheader("Performance Visualization")
+
+    perf_data = pd.DataFrame({
+        "Model": ["K-Means", "Random Forest", "SARIMA"],
+        "Performance": [3, 92, 0.23],
+        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
+    })
+
+    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
+    fig = px.bar(
+        perf_data,
+        x="Model",
+        y="Scaled Performance",
+        color="Model",
+        text="Performance",
+        title="📊 Model Performance Comparison",
+        hover_data=["Metric"],
+        color_discrete_sequence=px.colors.qualitative.Bold
+    )
+
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    fig.update_layout(
+        yaxis_title="Scaled Performance (Normalized %)",
+        xaxis_title="Model",
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Note: Metrics are normalized for visualization only — K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
