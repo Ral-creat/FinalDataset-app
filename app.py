@@ -796,6 +796,7 @@ with tabs[6]:
     It highlights their main purpose, performance metrics, and key takeaways.
     """)
 
+    # Original summary table (unchanged)
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -817,7 +818,47 @@ with tabs[6]:
 
     st.info("💡 Each model has a distinct role: K-Means for discovery, Random Forest for prediction, and SARIMA for forecasting.")
 
+    # ------------------------------
+    # Visual Difference of Model Results
+    # ------------------------------
+    st.subheader("Visual Comparison of Model Performance")
+
+    st.markdown("The chart below shows how each model performs based on its main metric — allowing a quick visual diff of their effectiveness.")
+
+    # Create numeric comparison data (for plotting)
+    perf_data = pd.DataFrame({
+        "Model": ["K-Means", "Random Forest", "SARIMA"],
+        "Performance": [3, 92, 0.23],  # 3 clusters, 92% accuracy, RMSE 0.23
+        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
+    })
+
+    # Normalize the performance for visualization (so scale won't be weird)
+    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
+    fig = px.bar(
+        perf_data,
+        x="Model",
+        y="Scaled Performance",
+        color="Model",
+        text="Performance",
+        title="📊 Model Performance Comparison",
+        hover_data=["Metric"],
+        color_discrete_sequence=px.colors.qualitative.Bold
+    )
+
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    fig.update_layout(
+        yaxis_title="Scaled Performance (Normalized %)",
+        xaxis_title="Model",
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Note: Metrics were scaled for visualization purposes only. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
