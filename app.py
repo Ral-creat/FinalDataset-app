@@ -660,25 +660,32 @@ with tabs[4]:
 # Time Series (SARIMA)
 # ------------------------------
 with tabs[5]:
-    st.header("Time Series forecasting (SARIMA)")
+    st.header("Time Series Forecasting (SARIMA)")
+
+    # Helper function to scale y-axis
+    def scale_yaxis_0_2(fig):
+        fig.update_yaxes(range=[0, 2])
+        return fig
+
     if 'df' not in locals():
         st.warning("Do data cleaning first.")
     else:
         st.markdown("This section resamples Water Level to daily average, checks stationarity, fits an example SARIMA, and shows forecasts.")
-        # create datetime index if possible
+
+        # Create datetime index
         df_temp = create_datetime_index(df)
         if not isinstance(df_temp.index, pd.DatetimeIndex):
             st.error("Your dataset doesn't have usable Year/Month/Day date parts to form a time index. Add Year/Month/Day columns for time series forecasting.")
         else:
             ts = df_temp['Water Level'].resample('D').mean()
-            # fill NaNs for modelling
             ts_filled = ts.fillna(method='ffill').fillna(method='bfill')
 
             st.subheader("Time series preview (daily avg)")
             fig = px.line(ts_filled, title="Daily average Water Level")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(scale_yaxis_0_2(fig), use_container_width=True)
+
             if show_explanations:
-                st.markdown("**Explanation:** Original event data may have many days with no measurement; we resample to daily mean and fill gaps to produce a continuous series for SARIMA.")
+                st.markdown("**Explanation:** The data is resampled to daily averages, filling missing gaps to make it continuous for SARIMA modeling.")
 
             # ADF test
             st.subheader("Stationarity test (ADF)")
@@ -686,44 +693,33 @@ with tabs[5]:
                 adf_result = adfuller(ts_filled.dropna())
                 st.write(f"ADF Statistic: {adf_result[0]:.4f}")
                 st.write(f"P-value: {adf_result[1]:.4f}")
-                st.write("If p-value > 0.05, series is likely non-stationary and differencing is recommended.")
+                st.write("If p-value > 0.05, the series is likely non-stationary — differencing recommended.")
             except Exception as e:
                 st.error(f"ADF test failed: {e}")
                 adf_result = (None, 1.0)
 
-            if show_explanations:
-                st.markdown("**Explanation:** Augmented Dickey-Fuller test checks stationarity. Non-stationary series need differencing (d>0).")
-
-            # differencing if needed
+            # Differencing if needed
             d = 0
             if adf_result[1] > 0.05:
                 d = 1
                 ts_diff = ts_filled.diff().dropna()
                 fig = px.line(ts_diff, title="First-order differenced series")
-                st.plotly_chart(fig, use_container_width=True)
-                if show_explanations:
-                    st.markdown("**Explanation:** After first differencing we remove trends; re-check ADF on differenced series before modelling.")
+                st.plotly_chart(scale_yaxis_0_2(fig), use_container_width=True)
 
-            # Show ACF/PACF plots
+            # ACF/PACF
             st.subheader("ACF & PACF (help pick p/q values)")
-            fig_acf = plt.figure(figsize=(10,4))
             try:
+                fig_acf = plt.figure(figsize=(10,4))
                 plot_acf(ts_filled.dropna(), lags=40, ax=fig_acf.gca())
                 st.pyplot(fig_acf)
-            except Exception as e:
-                st.error(f"ACF plot failed: {e}")
-            fig_pacf = plt.figure(figsize=(10,4))
-            try:
+
+                fig_pacf = plt.figure(figsize=(10,4))
                 plot_pacf(ts_filled.dropna(), lags=40, ax=fig_pacf.gca())
                 st.pyplot(fig_pacf)
             except Exception as e:
-                st.error(f"PACF plot failed: {e}")
-            if show_explanations:
-                st.markdown("**Explanation:** PACF suggests AR order (p), ACF suggests MA order (q). Seasonal spikes indicate seasonal order (P,Q,s).")
+                st.error(f"Plot failed: {e}")
 
-            # ------------------------------
-            # Fit a sample SARIMA (table format output)
-            # ------------------------------
+            # Fit SARIMA model
             st.subheader("Fit example SARIMA model")
             with st.spinner("Fitting SARIMA (may take a moment)..."):
                 try:
@@ -738,20 +734,11 @@ with tabs[5]:
                     )
                     results = model_sarima.fit(disp=False)
 
-                    # Convert summary to table
                     summary_table = results.summary().tables[1]
                     import io
-                    from pandas import read_csv
-                    summary_df = read_csv(io.StringIO(summary_table.as_csv()))
+                    summary_df = pd.read_csv(io.StringIO(summary_table.as_csv()))
                     st.dataframe(summary_df, use_container_width=True)
 
-                    if show_explanations:
-                        st.markdown("""
-                        **Explanation:**  
-                        SARIMA models capture both seasonal and non-seasonal components.  
-                        This table summarizes coefficient estimates, standard errors, z-values, and p-values.  
-                        Use AIC/BIC for model comparison.
-                        """)
                 except Exception as e:
                     st.error(f"SARIMA fit failed: {e}")
                     results = None
@@ -764,21 +751,13 @@ with tabs[5]:
                     pred_mean = pred.predicted_mean
                     pred_ci = pred.conf_int()
 
-                    # Plot
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(x=ts_filled.index, y=ts_filled, name='Observed'))
                     fig.add_trace(go.Scatter(x=pred_mean.index, y=pred_mean, name='Forecast'))
                     fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,0], fill=None, mode='lines', line=dict(width=0)))
                     fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,1], fill='tonexty', name='95% CI', mode='lines', line=dict(width=0)))
                     fig.update_layout(title="SARIMA Forecast", xaxis_title="Date", yaxis_title="Water Level")
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    if show_explanations:
-                        st.markdown("""
-                        **Explanation:**  
-                        The forecast shows predicted mean water levels with 95% confidence intervals.  
-                        Ideal for short-term flood preparedness planning.
-                        """)
+                    st.plotly_chart(scale_yaxis_0_2(fig), use_container_width=True)
                 else:
                     st.error("No SARIMA results available to forecast.")
             except Exception as e:
@@ -796,7 +775,7 @@ with tabs[6]:
     It highlights their main purpose, performance metrics, and key takeaways.
     """)
 
-    # Original summary table (unchanged)
+    # Original summary table
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -818,21 +797,18 @@ with tabs[6]:
 
     st.info("💡 Each model has a distinct role: K-Means for discovery, Random Forest for prediction, and SARIMA for forecasting.")
 
-    # ------------------------------
     # Visual Difference of Model Results
-    # ------------------------------
     st.subheader("Visual Comparison of Model Performance")
 
     st.markdown("The chart below shows how each model performs based on its main metric — allowing a quick visual diff of their effectiveness.")
 
-    # Create numeric comparison data (for plotting)
     perf_data = pd.DataFrame({
         "Model": ["K-Means", "Random Forest", "SARIMA"],
-        "Performance": [3, 92, 0.23],  # 3 clusters, 92% accuracy, RMSE 0.23
+        "Performance": [3, 92, 0.23],  # raw metrics
         "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
     })
 
-    # Normalize the performance for visualization (so scale won't be weird)
+    # Normalize values for scaling (visual only)
     perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
 
     fig = px.bar(
@@ -853,12 +829,13 @@ with tabs[6]:
         showlegend=False
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(scale_yaxis_0_2(fig), use_container_width=True)
 
-    st.caption("Note: Metrics were scaled for visualization purposes only. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
+    st.caption("Note: Metrics are scaled for visual comparison. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower = better).")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
