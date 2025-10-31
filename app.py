@@ -802,7 +802,7 @@ with tabs[6]:
 
     st.info("💡 Each model has a unique focus — K-Means for discovery, Random Forest for classification, and SARIMA for forecasting trends.")
 
-    # --- Visual Comparison ---
+    # --- Visual Comparison (Chart + Table) ---
     st.subheader("🎨 Visual Comparison of Model Results")
 
     st.markdown("This visualization highlights how each model performed based on its primary metric.")
@@ -813,7 +813,6 @@ with tabs[6]:
         "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
     })
 
-    # Normalize for consistent visual scaling
     perf_data["Scaled"] = perf_data["Value"] / perf_data["Value"].max() * 100
 
     col1, col2 = st.columns(2)
@@ -854,9 +853,59 @@ with tabs[6]:
 
     st.caption("📎 Note: Metrics are scaled only for visualization clarity. Actual values are shown in tables.")
 
+    # ------------------------------
+    # Visual Comparison (Side-by-side)
+    # ------------------------------
+    st.subheader("🧩 Visual Comparison of Each Model")
+
+    col1, col2, col3 = st.columns(3)
+
+    # --- K-Means Card ---
+    with col1:
+        st.markdown("""
+        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;
+        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>🌀 K-Means Clustering</h3>
+            <p><b>Purpose:</b> Identify flood pattern clusters</p>
+            <p><b>Metric:</b> No. of Clusters</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#1565C0;'>3 Clusters</span></p>
+            <hr style='border:0.5px solid #90CAF9;'>
+            <p><b>Insight:</b><br>Groups similar flood behavior patterns to classify areas into low, medium, and high flood risks.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- Random Forest Card ---
+    with col2:
+        st.markdown("""
+        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;
+        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>🌳 Random Forest</h3>
+            <p><b>Purpose:</b> Predict flood severity or risk level</p>
+            <p><b>Metric:</b> Accuracy</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#2E7D32;'>92%</span></p>
+            <hr style='border:0.5px solid #A5D6A7;'>
+            <p><b>Insight:</b><br>Achieved high accuracy in predicting flood severity using environmental and historical data.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # --- SARIMA Card ---
+    with col3:
+        st.markdown("""
+        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;
+        box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>📈 SARIMA</h3>
+            <p><b>Purpose:</b> Forecast future water levels</p>
+            <p><b>Metric:</b> RMSE</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#6A1B9A;'>0.23</span></p>
+            <hr style='border:0.5px solid #CE93D8;'>
+            <p><b>Insight:</b><br>Accurate short-term water level forecasting model with minimal error — ideal for disaster preparedness.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
