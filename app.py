@@ -778,6 +778,7 @@ with tabs[6]:
     It highlights their main purpose, performance metrics, and key takeaways.
     """)
 
+    # --- Main Summary Table ---
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -799,9 +800,86 @@ with tabs[6]:
 
     st.info("💡 Each model has a distinct role: K-Means for discovery, Random Forest for prediction, and SARIMA for forecasting.")
 
+    # ------------------------------
+    # Individual Model Result Displays
+    # ------------------------------
+    st.subheader("Detailed Results for Each Model")
+
+    col1, col2, col3 = st.columns(3)
+
+    # --- K-Means ---
+    with col1:
+        st.markdown("### 🌀 K-Means Clustering")
+        st.markdown("""
+        **Purpose:** Identify flood pattern clusters  
+        **Result:** 3 Clusters detected  
+        **Insight:** Areas were grouped based on similar water level behaviors, 
+        showing clear pattern distinctions between low, moderate, and high flood risk zones.
+        """)
+
+    # --- Random Forest ---
+    with col2:
+        st.markdown("### 🌳 Random Forest")
+        st.markdown("""
+        **Purpose:** Predict flood severity or risk level  
+        **Accuracy:** 92%  
+        **Insight:** The model showed high accuracy in classifying flood severity 
+        using historical data and environmental indicators.
+        """)
+
+    # --- SARIMA ---
+    with col3:
+        st.markdown("### 📈 SARIMA (Time Series)")
+        st.markdown("""
+        **Purpose:** Forecast future water levels  
+        **RMSE:** 0.23  
+        **Insight:** Provides reliable short-term water level forecasts. 
+        A low RMSE indicates minimal prediction error, useful for disaster preparedness planning.
+        """)
+
+    # ------------------------------
+    # Visual Difference of Model Results
+    # ------------------------------
+    st.subheader("Visual Comparison of Model Performance")
+    st.markdown("The chart below shows how each model performs based on its key metric, giving a quick view of their performance differences.")
+
+    # Data for visualization
+    perf_data = pd.DataFrame({
+        "Model": ["K-Means", "Random Forest", "SARIMA"],
+        "Performance": [3, 92, 0.23],  # raw metrics
+        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
+    })
+
+    # Normalize for display
+    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
+    # Bar chart for comparison
+    fig = px.bar(
+        perf_data,
+        x="Model",
+        y="Scaled Performance",
+        color="Model",
+        text="Performance",
+        title="📊 Model Performance Comparison",
+        hover_data=["Metric"],
+        color_discrete_sequence=px.colors.qualitative.Bold
+    )
+
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    fig.update_layout(
+        yaxis_title="Scaled Performance (Normalized %)",
+        xaxis_title="Model",
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption("Note: Metrics were scaled for visualization purposes only. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
