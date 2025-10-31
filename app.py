@@ -495,20 +495,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 import pandas as pd
+import plotly.express as px
+import matplotlib.pyplot as plt
+import streamlit as st
 
 with tabs[3]:
-    st.header("Flood occurrence prediction — RandomForest")
+    st.header("🌊 Flood Occurrence Prediction — RandomForest")
 
     if 'df' not in locals():
-        st.warning("Do data cleaning first.")
+        st.warning("⚠️ Please run data cleaning first.")
     else:
-        # Prepare features: water level OR numeric + month dummies
-        st.markdown("We train a RandomForest to predict `flood_occurred` (binary).")
+        st.markdown("We train a **RandomForest** model to predict `flood_occurred` based on water level and damage data.")
 
-        # Create target variable
+        # Create target variable (1 = flood occurred)
         df['flood_occurred'] = (df['Water Level'] > 0).astype(int)
 
-        # Feature set
+        # Feature engineering (numeric + month dummies)
         month_dummies = pd.get_dummies(df['Month'].astype(str).fillna('Unknown'), prefix='Month')
         X_basic = pd.concat([
             df[['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']].fillna(0),
@@ -516,68 +518,76 @@ with tabs[3]:
         ], axis=1)
         y = df['flood_occurred']
 
-        # Train/test split
+        # Split data
         Xtr, Xte, ytr, yte = train_test_split(X_basic, y, test_size=0.3, random_state=42)
 
-        # Model training
+        # Train model
         model = RandomForestClassifier(random_state=42)
         model.fit(Xtr, ytr)
         ypred = model.predict(Xte)
         acc = accuracy_score(yte, ypred)
 
-        # Display header
-        st.subheader("📊 Basic RandomForest Results")
+        # Accuracy + report
+        st.subheader("📊 RandomForest Evaluation")
+        st.table(pd.DataFrame({"Metric": ["Accuracy (test)"], "Value": [f"{acc:.4f}"]}))
 
-        # Accuracy table
-        acc_table = pd.DataFrame({
-            "Metric": ["Accuracy (test)"],
-            "Value": [f"{acc:.4f}"]
-        })
-        st.table(acc_table)
-
-        # Classification report in tabular format
         report = classification_report(yte, ypred, output_dict=True)
-        report_df = pd.DataFrame(report).transpose().round(3)
-
         st.markdown("### 📈 Classification Report")
-        st.table(report_df)
+        st.table(pd.DataFrame(report).transpose().round(3))
 
-        # Optional explanation
         if show_explanations:
             st.markdown("""
             **🧠 Explanation:**  
-            RandomForest uses many decision trees and aggregates their votes.  
-            High accuracy may indicate a strong signal in the features, but always check class balance and overfitting.  
-            Use the classification report to inspect precision and recall per class.
+            RandomForest combines many decision trees to make predictions.  
+            Check class balance & overfitting if accuracy seems too high.
             """)
 
- # feature importances
+        # Feature importances
         fi = pd.Series(model.feature_importances_, index=X_basic.columns).sort_values(ascending=False).head(10)
-        st.subheader("Top feature importances")
+        st.subheader("🔥 Top Feature Importances")
         st.bar_chart(fi)
 
         if show_explanations:
-            st.markdown("**Explanation:** Features with higher importance contributed more to model decisions. `Water Level` often dominates.")
+            st.markdown("**Explanation:** Higher importance = stronger effect on model prediction. Usually, `Water Level` dominates.")
 
-        # Allow user to show predicted probabilities per month (as earlier notebook did)
-        if st.button("Show predicted flood probability per month (using median inputs)"):
+        # --- Monthly Flood Probability (Raw Data) ---
+        st.subheader("📅 Monthly Flood Probabilities (from actual data)")
+        monthly_flood_counts = df.groupby('Month')['flood_occurred'].sum()
+        monthly_total_counts = df.groupby('Month')['flood_occurred'].count()
+        monthly_flood_probability = (monthly_flood_counts / monthly_total_counts).sort_values(ascending=False)
+
+        st.dataframe(monthly_flood_probability.rename("Flood Probability").round(3))
+        st.bar_chart(monthly_flood_probability)
+
+        # --- Predicted Flood Probabilities (Model-Based) ---
+        if st.button("🔮 Show Predicted Flood Probability per Month (using median inputs)"):
             median_vals = X_basic.median()
             months = sorted(df['Month'].dropna().unique())
             pred_rows = []
+
             for m in months:
                 row = median_vals.copy()
-                # set the month dummy for this month to 1 and others to 0 if present
+                # Set only one month dummy to 1
                 md = [c for c in X_basic.columns if c.startswith('Month_')]
                 for col in md:
                     row[col] = 1 if col == f"Month_{m}" else 0
                 pred_rows.append(row.values)
+
             Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-            probs = model.predict_proba(Xpred)[:,1]
-            prob_df = pd.DataFrame({'Month':months,'flood_prob':probs}).sort_values('flood_prob',ascending=False)
-            fig = px.bar(prob_df, x='Month', y='flood_prob', title="Predicted flood probability per month (median inputs)")
+            probs = model.predict_proba(Xpred)[:, 1]
+            prob_df = pd.DataFrame({'Month': months, 'Predicted Probability': probs}).sort_values('Predicted Probability', ascending=False)
+
+            fig = px.bar(prob_df, x='Month', y='Predicted Probability',
+                         title="Predicted Flood Probability per Month (median inputs)",
+                         color='Predicted Probability', color_continuous_scale='Blues')
             st.plotly_chart(fig, use_container_width=True)
+
             if show_explanations:
-                st.markdown("**Explanation:** This uses median numeric values and swaps month dummies to estimate flood likelihood per month. It's a model-based estimate, not a raw frequency.")
+                st.markdown("""
+                **💡 Explanation:**  
+                This uses the **median values** of numeric features and swaps month dummies  
+                to estimate how flood likelihood changes across months.
+                """)
 
 # ------------------------------
 # Flood Severity Tab
@@ -836,6 +846,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
