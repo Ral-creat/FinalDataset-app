@@ -669,56 +669,70 @@ with tabs[4]:
 # ------------------------------
 # Time Series Model Evaluation & Comparison
 # ------------------------------
-
 st.subheader("📈 Time Series Model Evaluation")
 
-# Make predictions on the historical data using the Prophet model
-forecast_prophet = model_prophet.predict(prophet_df[['ds']])
-prophet_fitted_values = forecast_prophet.set_index('ds')['yhat'].reindex(ts_df_filled.index)
+try:
+    # ✅ Make sure Prophet model exists before using it
+    if 'model_prophet' in locals() and 'prophet_df' in locals():
+        forecast_prophet = model_prophet.predict(prophet_df[['ds']])
+        prophet_fitted_values = forecast_prophet.set_index('ds')['yhat'].reindex(ts_df_filled.index)
 
-# Compute metrics
-rmse_prophet = np.sqrt(mean_squared_error(ts_df_filled, prophet_fitted_values))
-mae_prophet = mean_absolute_error(ts_df_filled, prophet_fitted_values)
+        # Compute metrics for Prophet
+        rmse_prophet = np.sqrt(mean_squared_error(ts_df_filled, prophet_fitted_values))
+        mae_prophet = mean_absolute_error(ts_df_filled, prophet_fitted_values)
+    else:
+        rmse_prophet = np.nan
+        mae_prophet = np.nan
+        st.warning("⚠️ Prophet model not available yet. Skipping Prophet evaluation.")
+    
+    # ✅ Check if other model metrics exist
+    if 'rmse_optimal' in locals() and 'rmse_sarimax' in locals():
+        comparison_df = pd.DataFrame({
+            "Model": ["Optimal SARIMA", "SARIMAX (with Exog)", "Prophet"],
+            "RMSE": [rmse_optimal, rmse_sarimax, rmse_prophet],
+            "MAE": [mae_optimal, mae_sarimax, mae_prophet]
+        })
 
-# Display results
-st.markdown("### 📊 Model Performance Results")
+        st.markdown("### 📊 Model Performance Results")
+        st.dataframe(
+            comparison_df.style.highlight_min(subset=["RMSE", "MAE"], color="#8ef"),
+            use_container_width=True
+        )
 
-comparison_df = pd.DataFrame({
-    "Model": ["Optimal SARIMA", "SARIMAX (with Exog)", "Prophet"],
-    "RMSE": [rmse_optimal, rmse_sarimax, rmse_prophet],
-    "MAE": [mae_optimal, mae_sarimax, mae_prophet]
-})
+        # --- Plot Comparison ---
+        st.markdown("### 🔍 Visual Comparison of RMSE and MAE")
+        fig = px.bar(
+            comparison_df.melt(id_vars="Model", var_name="Metric", value_name="Value"),
+            x="Model",
+            y="Value",
+            color="Metric",
+            barmode="group",
+            text_auto=".4f",
+            title="📉 Model Performance Comparison (Lower = Better)",
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
 
-# Display table
-st.dataframe(comparison_df.style.highlight_min(subset=["RMSE", "MAE"], color="#8ef"), use_container_width=True)
+        fig.update_layout(
+            yaxis_title="Error Value",
+            xaxis_title="Model",
+            title_x=0.5,
+            legend_title="Performance Metric",
+            template="plotly_white"
+        )
 
-# --- Plot Comparison ---
-st.markdown("### 🔍 Visual Comparison of RMSE and MAE")
+        st.plotly_chart(fig, use_container_width=True)
 
-fig = px.bar(
-    comparison_df.melt(id_vars="Model", var_name="Metric", value_name="Value"),
-    x="Model",
-    y="Value",
-    color="Metric",
-    barmode="group",
-    text_auto=".4f",
-    title="📉 Model Performance Comparison (Lower = Better)",
-    color_discrete_sequence=px.colors.qualitative.Bold
-)
+        # --- Best Model Identification ---
+        if comparison_df["RMSE"].notna().any():
+            best_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
+            st.success(f"✅ Based on RMSE, the **best performing model** is: **{best_model}**")
+        else:
+            st.info("No model metrics available yet.")
+    else:
+        st.warning("⚠️ SARIMA models not yet available. Please train them first.")
 
-fig.update_layout(
-    yaxis_title="Error Value",
-    xaxis_title="Model",
-    title_x=0.5,
-    legend_title="Performance Metric",
-    template="plotly_white"
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# --- Best Model Identification ---
-best_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
-st.success(f"✅ Based on RMSE, the **best performing model** is: **{best_model}**")
+except Exception as e:
+    st.error(f"❌ Error during model comparison: {e}")
 
 # ------------------------------
 # Model Comparison Tab (Visual Format)
@@ -837,6 +851,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
