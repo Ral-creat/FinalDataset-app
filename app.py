@@ -745,50 +745,7 @@ with tabs[5]:
 
                 st.markdown("**Interpretation:** Lower RMSE/MAE indicates better model fit. Large errors suggest high volatility or insufficient data.")
 
-            # ------------------------------
-            # Flood Severity Classification
-            # ------------------------------
-            st.subheader("🌊 Flood Severity Classification using Random Forest")
-
-            def categorize_severity(water_level):
-                if water_level <= 5:
-                    return 'Low'
-                elif 5 < water_level <= 15:
-                    return 'Medium'
-                else:
-                    return 'High'
-
-            df['Flood_Severity'] = df['Water Level'].apply(categorize_severity)
-            st.write("**Distribution of Flood Severity:**")
-            st.write(df['Flood_Severity'].value_counts())
-
-            try:
-                feature_cols_severity = [
-                    'No. of Families affected',
-                    'Damage Infrastructure',
-                    'Damage Agriculture'
-                ] + list(month_dummies.columns) + list(municipality_dummies.columns) + list(barangay_dummies.columns)
-
-                target_col_severity = 'Flood_Severity'
-                X_severity = df[feature_cols_severity]
-                y_severity = df[target_col_severity]
-
-                X_train_s, X_test_s, y_train_s, y_test_s = train_test_split(
-                    X_severity, y_severity, test_size=0.3, random_state=42, stratify=y_severity
-                )
-
-                model_severity = RandomForestClassifier(random_state=42)
-                model_severity.fit(X_train_s, y_train_s)
-                y_pred_s = model_severity.predict(X_test_s)
-
-                acc_s = accuracy_score(y_test_s, y_pred_s)
-                st.write(f"**Flood Severity Model Accuracy:** {acc_s:.4f}")
-                st.text("Classification Report:")
-                st.text(classification_report(y_test_s, y_pred_s))
-
-            except Exception as e:
-                st.error(f"Severity model failed: {e}")
-
+           
 
 # ------------------------------
 # Model Comparison Tab
@@ -862,6 +819,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
