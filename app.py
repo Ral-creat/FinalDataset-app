@@ -672,80 +672,100 @@ with tabs[4]:
 with tabs[5]:
     st.header("Time Series Forecasting (SARIMA)")
     if 'df' not in locals():
-        st.warning("⚠️ Do data cleaning first.")
+        st.warning("Do data cleaning first.")
     else:
-        st.markdown("This section resamples Water Level to daily average, fits a SARIMA model, and visualizes forecasts with model performance metrics and severity classification.")
+        st.markdown("This section resamples Water Level to daily average, checks stationarity, fits an example SARIMA, and shows forecasts.")
 
-        # --- Create datetime index ---
+        # create datetime index if possible
         df_temp = create_datetime_index(df)
         if not isinstance(df_temp.index, pd.DatetimeIndex):
-            st.error("❌ Your dataset doesn't have usable Year/Month/Day date parts to form a time index. Add Year/Month/Day columns for time series forecasting.")
+            st.error("Your dataset doesn't have usable Year/Month/Day date parts to form a time index. Add Year/Month/Day columns for time series forecasting.")
         else:
-            # --- Prepare time series ---
-            ts_df = df_temp['Water Level'].resample('D').mean()
-            ts_df_filled = ts_df.fillna(method='ffill').fillna(method='bfill')
+            ts = df_temp['Water Level'].resample('D').mean()
+            ts_filled = ts.fillna(method='ffill').fillna(method='bfill')
 
-            st.subheader("📅 Daily Average Water Level")
-            fig = px.line(ts_df_filled, title="Daily Average Water Level Over Time")
+            st.subheader("Time series preview (daily avg)")
+            fig = px.line(ts_filled, title="Daily average Water Level")
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- Fit SARIMA Model ---
-            st.subheader("📈 Fit Example SARIMA Model")
-            with st.spinner("Fitting SARIMA model..."):
+            if show_explanations:
+                st.markdown("**Explanation:** The data is resampled to daily averages, filling missing gaps to make it continuous for SARIMA modeling.")
+
+            # ADF test
+            st.subheader("Stationarity test (ADF)")
+            try:
+                adf_result = adfuller(ts_filled.dropna())
+                st.write(f"ADF Statistic: {adf_result[0]:.4f}")
+                st.write(f"P-value: {adf_result[1]:.4f}")
+                st.write("If p-value > 0.05, the series is likely non-stationary — differencing recommended.")
+            except Exception as e:
+                st.error(f"ADF test failed: {e}")
+                adf_result = (None, 1.0)
+
+            d = 0
+            if adf_result[1] > 0.05:
+                d = 1
+                ts_diff = ts_filled.diff().dropna()
+                fig = px.line(ts_diff, title="First-order differenced series")
+                st.plotly_chart(fig, use_container_width=True)
+
+            # ACF/PACF
+            st.subheader("ACF & PACF (help pick p/q values)")
+            try:
+                fig_acf = plt.figure(figsize=(10,4))
+                plot_acf(ts_filled.dropna(), lags=40, ax=fig_acf.gca())
+                st.pyplot(fig_acf)
+
+                fig_pacf = plt.figure(figsize=(10,4))
+                plot_pacf(ts_filled.dropna(), lags=40, ax=fig_pacf.gca())
+                st.pyplot(fig_pacf)
+            except Exception as e:
+                st.error(f"Plot failed: {e}")
+
+            # Fit SARIMA
+            st.subheader("Fit example SARIMA model")
+            with st.spinner("Fitting SARIMA (may take a moment)..."):
                 try:
-                    from statsmodels.tsa.statespace.sarimax import SARIMAX
-                    order = (1, 1, 1)
+                    order = (1, d, 1)
                     seasonal_order = (1, 0, 1, 7)
                     model_sarima = SARIMAX(
-                        ts_df_filled,
+                        ts_filled,
                         order=order,
                         seasonal_order=seasonal_order,
                         enforce_stationarity=False,
                         enforce_invertibility=False
                     )
-                    results_sarima = model_sarima.fit(disp=False)
+                    results = model_sarima.fit(disp=False)
 
-                    st.success("✅ SARIMA model fitted successfully!")
-                    st.write(results_sarima.summary())
+                    summary_table = results.summary().tables[1]
+                    import io
+                    summary_df = pd.read_csv(io.StringIO(summary_table.as_csv()))
+                    st.dataframe(summary_df, use_container_width=True)
+
                 except Exception as e:
-                    st.error(f"Model fitting failed: {e}")
-                    results_sarima = None
+                    st.error(f"SARIMA fit failed: {e}")
+                    results = None
 
-            # --- Plot Fitted Values & Predictions ---
-            if results_sarima is not None:
-                steps_ahead = st.slider("Forecast Horizon (Days)", 7, 90, 30)
-                last_date = ts_df_filled.index[-1]
-                future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=steps_ahead, freq='D')
-                predictions = results_sarima.predict(start=future_dates[0], end=future_dates[-1])
+            # Forecast
+            steps = st.slider("Forecast horizon (days)", 7, 365, 30)
+            try:
+                if results is not None:
+                    pred = results.get_forecast(steps=steps)
+                    pred_mean = pred.predicted_mean
+                    pred_ci = pred.conf_int()
 
-                st.subheader("📊 SARIMA Model Fit and Predictions")
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=ts_filled.index, y=ts_filled, name='Observed'))
+                    fig.add_trace(go.Scatter(x=pred_mean.index, y=pred_mean, name='Forecast'))
+                    fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,0], fill=None, mode='lines', line=dict(width=0)))
+                    fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,1], fill='tonexty', name='95% CI', mode='lines', line=dict(width=0)))
+                    fig.update_layout(title="SARIMA Forecast", xaxis_title="Date", yaxis_title="Water Level")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.error("No SARIMA results available to forecast.")
+            except Exception as e:
+                st.error(f"Forecast failed: {e}")
 
-                fig, ax = plt.subplots(figsize=(15, 7))
-                ax.plot(ts_df_filled.index, ts_df_filled, label='Original (Filled) Time Series')
-                ax.plot(results_sarima.fittedvalues.index, results_sarima.fittedvalues, color='green', label='Fitted Values')
-                ax.plot(predictions.index, predictions, color='red', label='Predictions')
-                ax.set_title('SARIMA Model Fit and Predictions')
-                ax.set_xlabel('Date')
-                ax.set_ylabel('Average Water Level')
-                ax.legend()
-                st.pyplot(fig)
-
-                # --- Compute Model Performance ---
-                from sklearn.metrics import mean_squared_error, mean_absolute_error
-                import numpy as np
-
-                actual_values = ts_df_filled[results_sarima.fittedvalues.index]
-                fitted_values = results_sarima.fittedvalues
-                rmse = np.sqrt(mean_squared_error(actual_values, fitted_values))
-                mae = mean_absolute_error(actual_values, fitted_values)
-
-                st.subheader("📉 SARIMA Model Performance")
-                st.write(f"**Root Mean Squared Error (RMSE):** {rmse:.4f}")
-                st.write(f"**Mean Absolute Error (MAE):** {mae:.4f}")
-
-                st.markdown("**Interpretation:** Lower RMSE/MAE indicates better model fit. Large errors suggest high volatility or insufficient data.")
-
-           
 
 # ------------------------------
 # Model Comparison Tab
@@ -758,7 +778,6 @@ with tabs[6]:
     It highlights their main purpose, performance metrics, and key takeaways.
     """)
 
-    # Original summary table
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -780,45 +799,10 @@ with tabs[6]:
 
     st.info("💡 Each model has a distinct role: K-Means for discovery, Random Forest for prediction, and SARIMA for forecasting.")
 
-    # Visual Difference of Model Results
-    st.subheader("Visual Comparison of Model Performance")
-
-    st.markdown("The chart below shows how each model performs based on its main metric — allowing a quick visual diff of their effectiveness.")
-
-    perf_data = pd.DataFrame({
-        "Model": ["K-Means", "Random Forest", "SARIMA"],
-        "Performance": [3, 92, 0.23],  # raw metrics
-        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
-    })
-
-    # Normalize values for scaling (visual only)
-    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
-
-    fig = px.bar(
-        perf_data,
-        x="Model",
-        y="Scaled Performance",
-        color="Model",
-        text="Performance",
-        title="📊 Model Performance Comparison",
-        hover_data=["Metric"],
-        color_discrete_sequence=px.colors.qualitative.Bold
-    )
-
-    fig.update_traces(texttemplate='%{text}', textposition='outside')
-    fig.update_layout(
-        yaxis_title="Scaled Performance (Normalized %)",
-        xaxis_title="Model",
-        showlegend=False
-    )
-
-    st.plotly_chart(scale_yaxis_0_2(fig), use_container_width=True)
-
-    st.caption("Note: Metrics are scaled for visual comparison. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower = better).")
-
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
