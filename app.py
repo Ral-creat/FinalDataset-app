@@ -667,125 +667,58 @@ with tabs[4]:
             st.error(f"❌ Could not train severity model: {e}")
 
 # ------------------------------
-# Time Series Forecasting (SARIMA + Prophet Comparison)
+# Time Series Model Evaluation & Comparison
 # ------------------------------
-with tabs[5]:
-    st.header("📈 Time Series Forecasting (SARIMA & Prophet Comparison)")
 
-    import itertools
-    import warnings
-    import matplotlib.pyplot as plt
-    from statsmodels.tsa.statespace.sarimax import SARIMAX
-    from sklearn.metrics import mean_squared_error, mean_absolute_error
+st.subheader("📈 Time Series Model Evaluation")
 
-    if 'df' not in locals():
-        st.warning("⚠️ Please complete data cleaning first.")
-    else:
-        st.markdown("""
-        This section performs **Time Series Forecasting** using:
-        - **SARIMA**: for historical trend-based forecasting  
-        - **SARIMAX (with exogenous variables)**: adds external factors  
-        - **Prophet**: trend and seasonality decomposition  
-        It automatically compares performance using **RMSE** and **MAE**.
-        """)
+# Make predictions on the historical data using the Prophet model
+forecast_prophet = model_prophet.predict(prophet_df[['ds']])
+prophet_fitted_values = forecast_prophet.set_index('ds')['yhat'].reindex(ts_df_filled.index)
 
-        # --- Prepare the time series ---
-        df_temp = create_datetime_index(df)
-        if not isinstance(df_temp.index, pd.DatetimeIndex):
-            st.error("Your dataset doesn't have usable Year/Month/Day date parts to form a time index.")
-        else:
-            ts = df_temp['Water Level'].resample('D').mean()
-            ts_df_filled = ts.fillna(method='ffill').fillna(method='bfill')
+# Compute metrics
+rmse_prophet = np.sqrt(mean_squared_error(ts_df_filled, prophet_fitted_values))
+mae_prophet = mean_absolute_error(ts_df_filled, prophet_fitted_values)
 
-            st.subheader("📊 Daily Average Water Level")
-            fig = px.line(ts_df_filled, title="Daily Average Water Level (Filled Gaps)")
-            st.plotly_chart(fig, use_container_width=True)
+# Display results
+st.markdown("### 📊 Model Performance Results")
 
-            # --- ADF Test for Stationarity ---
-            st.subheader("📉 Stationarity Test (ADF)")
-            try:
-                adf_result = adfuller(ts_df_filled.dropna())
-                st.write(f"ADF Statistic: {adf_result[0]:.4f}")
-                st.write(f"P-value: {adf_result[1]:.4f}")
-                if adf_result[1] > 0.05:
-                    st.warning("Series is likely non-stationary (p > 0.05). Differencing recommended.")
-                else:
-                    st.success("Series appears stationary (p < 0.05).")
-            except Exception as e:
-                st.error(f"ADF test failed: {e}")
+comparison_df = pd.DataFrame({
+    "Model": ["Optimal SARIMA", "SARIMAX (with Exog)", "Prophet"],
+    "RMSE": [rmse_optimal, rmse_sarimax, rmse_prophet],
+    "MAE": [mae_optimal, mae_sarimax, mae_prophet]
+})
 
-           
-            # --- Fit Optimal SARIMA ---
-            st.subheader("🧠 Fit Optimal SARIMA Model")
-            with st.spinner("Training SARIMA..."):
-                results_sarima_optimal = SARIMAX(
-                    ts_df_filled,
-                    order=best_pdq,
-                    seasonal_order=best_seasonal_pdq,
-                    enforce_stationarity=False,
-                    enforce_invertibility=False
-                ).fit(disp=False)
+# Display table
+st.dataframe(comparison_df.style.highlight_min(subset=["RMSE", "MAE"], color="#8ef"), use_container_width=True)
 
-            st.write("Optimal SARIMA Summary:")
-            st.text(results_sarima_optimal.summary())
+# --- Plot Comparison ---
+st.markdown("### 🔍 Visual Comparison of RMSE and MAE")
 
-            # --- Prophet Model ---
-            st.subheader("🔮 Prophet Forecast Comparison")
-            from prophet import Prophet
+fig = px.bar(
+    comparison_df.melt(id_vars="Model", var_name="Metric", value_name="Value"),
+    x="Model",
+    y="Value",
+    color="Metric",
+    barmode="group",
+    text_auto=".4f",
+    title="📉 Model Performance Comparison (Lower = Better)",
+    color_discrete_sequence=px.colors.qualitative.Bold
+)
 
-            prophet_df = ts_df_filled.reset_index()
-            prophet_df.columns = ['ds', 'y']
+fig.update_layout(
+    yaxis_title="Error Value",
+    xaxis_title="Model",
+    title_x=0.5,
+    legend_title="Performance Metric",
+    template="plotly_white"
+)
 
-            model_prophet = Prophet()
-            model_prophet.fit(prophet_df)
+st.plotly_chart(fig, use_container_width=True)
 
-            forecast_prophet = model_prophet.predict(prophet_df[['ds']])
-            prophet_fitted_values = forecast_prophet.set_index('ds')['yhat'].reindex(ts_df_filled.index)
-
-            # --- Calculate Metrics ---
-            rmse_optimal = np.sqrt(mean_squared_error(ts_df_filled, results_sarima_optimal.fittedvalues))
-            mae_optimal = mean_absolute_error(ts_df_filled, results_sarima_optimal.fittedvalues)
-
-            rmse_prophet = np.sqrt(mean_squared_error(ts_df_filled, prophet_fitted_values))
-            mae_prophet = mean_absolute_error(ts_df_filled, prophet_fitted_values)
-
-            st.subheader("📊 Model Performance Comparison")
-            comparison_df = pd.DataFrame({
-                "Model": ["Optimal SARIMA", "Prophet"],
-                "RMSE": [rmse_optimal, rmse_prophet],
-                "MAE": [mae_optimal, mae_prophet]
-            })
-
-            st.dataframe(comparison_df, use_container_width=True)
-
-            best_model_name = "SARIMA" if rmse_optimal < rmse_prophet else "Prophet"
-            st.success(f"🏆 Best Performing Model: **{best_model_name}** based on RMSE")
-
-            # --- Visualization ---
-            st.subheader("📅 Forecast Visualization")
-            steps = st.slider("Forecast Horizon (days)", 7, 90, 30)
-
-            if best_model_name == "SARIMA":
-                future_forecast = results_sarima_optimal.get_forecast(steps=steps)
-                pred_mean = future_forecast.predicted_mean
-                pred_ci = future_forecast.conf_int()
-
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=ts_df_filled.index, y=ts_df_filled, name='Observed'))
-                fig.add_trace(go.Scatter(x=pred_mean.index, y=pred_mean, name='SARIMA Forecast', line=dict(color='red')))
-                fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,0], fill=None, mode='lines', line=dict(width=0)))
-                fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,1], fill='tonexty', name='95% CI', mode='lines', line=dict(width=0)))
-                fig.update_layout(title="Optimal SARIMA Forecast", xaxis_title="Date", yaxis_title="Water Level")
-                st.plotly_chart(fig, use_container_width=True)
-
-            else:
-                future_prophet = model_prophet.make_future_dataframe(periods=steps)
-                forecast_prophet_future = model_prophet.predict(future_prophet)
-                fig2 = px.line(forecast_prophet_future, x='ds', y='yhat', title="Prophet Model Forecast")
-                st.plotly_chart(fig2, use_container_width=True)
-
-            st.caption("📘 Lower RMSE & MAE values indicate better accuracy. SARIMA focuses on trend patterns; Prophet excels at handling seasonality.")
-
+# --- Best Model Identification ---
+best_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
+st.success(f"✅ Based on RMSE, the **best performing model** is: **{best_model}**")
 
 # ------------------------------
 # Model Comparison Tab (Visual Format)
@@ -904,6 +837,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
