@@ -714,38 +714,7 @@ with tabs[5]:
             except Exception as e:
                 st.error(f"ADF test failed: {e}")
 
-            # --- Grid Search for Optimal SARIMA Parameters ---
-            st.subheader("⚙️ SARIMA Parameter Tuning (Grid Search)")
-            with st.spinner("Finding best SARIMA parameters..."):
-                p = d = q = range(0, 3)
-                non_seasonal_pdq = list(itertools.product(p, d, q))
-                P = D = Q = range(0, 2)
-                s = [7]
-                seasonal_pdq = [(x[0], x[1], x[2], s[0]) for x in list(itertools.product(P, D, Q))]
-                warnings.filterwarnings("ignore")
-
-                best_aic = float("inf")
-                best_pdq = None
-                best_seasonal_pdq = None
-
-                for param in non_seasonal_pdq:
-                    for param_seasonal in seasonal_pdq:
-                        try:
-                            model = SARIMAX(ts_df_filled,
-                                            order=param,
-                                            seasonal_order=param_seasonal,
-                                            enforce_stationarity=False,
-                                            enforce_invertibility=False)
-                            results = model.fit(disp=False)
-                            if results.aic < best_aic:
-                                best_aic = results.aic
-                                best_pdq = param
-                                best_seasonal_pdq = param_seasonal
-                        except:
-                            continue
-
-            st.success(f"✅ Optimal SARIMA Parameters Found: SARIMA({best_pdq})x({best_seasonal_pdq}) with AIC = {best_aic:.2f}")
-
+           
             # --- Fit Optimal SARIMA ---
             st.subheader("🧠 Fit Optimal SARIMA Model")
             with st.spinner("Training SARIMA..."):
@@ -935,6 +904,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
