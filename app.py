@@ -768,17 +768,17 @@ with tabs[5]:
 
 
 # ------------------------------
-# Model Comparison Tab
+# Model Comparison Tab (Visual Format)
 # ------------------------------
 with tabs[6]:
-    st.title("Model Comparison Summary")
+    st.title("📊 Model Comparison Summary")
 
     st.markdown("""
-    This section compares the three machine learning models used in the flood pattern study.
-    It highlights their main purpose, performance metrics, and key takeaways.
+    This section visually compares the three machine learning models used in the flood pattern study.
+    Each column highlights the model’s goal, metric, and main findings — making it easier to spot their differences.
     """)
 
-    # --- Main Summary Table ---
+    # --- Comparison Table (same as before) ---
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -798,62 +798,67 @@ with tabs[6]:
     df_comparison = pd.DataFrame(comparison_data)
     st.table(df_comparison)
 
-    st.info("💡 Each model has a distinct role: K-Means for discovery, Random Forest for prediction, and SARIMA for forecasting.")
+    st.info("💡 Each model focuses on a different aspect: clustering, prediction, or forecasting — all working together for flood analysis.")
 
     # ------------------------------
-    # Individual Model Result Displays
+    # Visual Comparison (Side-by-side)
     # ------------------------------
-    st.subheader("Detailed Results for Each Model")
+    st.subheader("Visual Comparison of Each Model")
 
     col1, col2, col3 = st.columns(3)
 
-    # --- K-Means ---
+    # --- K-Means Card ---
     with col1:
-        st.markdown("### 🌀 K-Means Clustering")
         st.markdown("""
-        **Purpose:** Identify flood pattern clusters  
-        **Result:** 3 Clusters detected  
-        **Insight:** Areas were grouped based on similar water level behaviors, 
-        showing clear pattern distinctions between low, moderate, and high flood risk zones.
-        """)
+        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>🌀 K-Means Clustering</h3>
+            <p><b>Purpose:</b> Identify flood pattern clusters</p>
+            <p><b>Metric:</b> No. of Clusters</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#1565C0;'>3 Clusters</span></p>
+            <hr style='border:0.5px solid #90CAF9;'>
+            <p><b>Insight:</b><br>Groups similar flood behavior patterns to classify areas into low, medium, and high flood risks.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # --- Random Forest ---
+    # --- Random Forest Card ---
     with col2:
-        st.markdown("### 🌳 Random Forest")
         st.markdown("""
-        **Purpose:** Predict flood severity or risk level  
-        **Accuracy:** 92%  
-        **Insight:** The model showed high accuracy in classifying flood severity 
-        using historical data and environmental indicators.
-        """)
+        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>🌳 Random Forest</h3>
+            <p><b>Purpose:</b> Predict flood severity or risk level</p>
+            <p><b>Metric:</b> Accuracy</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#2E7D32;'>92%</span></p>
+            <hr style='border:0.5px solid #A5D6A7;'>
+            <p><b>Insight:</b><br>Achieved high accuracy in predicting flood severity using environmental and historical data.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # --- SARIMA ---
+    # --- SARIMA Card ---
     with col3:
-        st.markdown("### 📈 SARIMA (Time Series)")
         st.markdown("""
-        **Purpose:** Forecast future water levels  
-        **RMSE:** 0.23  
-        **Insight:** Provides reliable short-term water level forecasts. 
-        A low RMSE indicates minimal prediction error, useful for disaster preparedness planning.
-        """)
+        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+            <h3>📈 SARIMA</h3>
+            <p><b>Purpose:</b> Forecast future water levels</p>
+            <p><b>Metric:</b> RMSE</p>
+            <p><b>Result:</b> <span style='font-size:20px;color:#6A1B9A;'>0.23</span></p>
+            <hr style='border:0.5px solid #CE93D8;'>
+            <p><b>Insight:</b><br>Accurate short-term water level forecasting model with minimal error — ideal for disaster preparedness.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ------------------------------
-    # Visual Difference of Model Results
+    # Visual Graph Comparison
     # ------------------------------
-    st.subheader("Visual Comparison of Model Performance")
-    st.markdown("The chart below shows how each model performs based on its key metric, giving a quick view of their performance differences.")
+    st.subheader("Performance Visualization")
 
-    # Data for visualization
     perf_data = pd.DataFrame({
         "Model": ["K-Means", "Random Forest", "SARIMA"],
-        "Performance": [3, 92, 0.23],  # raw metrics
+        "Performance": [3, 92, 0.23],
         "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
     })
 
-    # Normalize for display
     perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
 
-    # Bar chart for comparison
     fig = px.bar(
         perf_data,
         x="Model",
@@ -874,11 +879,12 @@ with tabs[6]:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.caption("Note: Metrics were scaled for visualization purposes only. K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
+    st.caption("Note: Metrics are normalized for visualization only — K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
