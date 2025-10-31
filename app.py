@@ -232,38 +232,6 @@ uploaded_file = st.sidebar.file_uploader("Upload flood CSV", type=['csv','txt','
 use_example = st.sidebar.checkbox("Use example dataset (if no upload)", value=False)
 plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index=0)
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
-from prophet import Prophet
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-import numpy as np
-import pandas as pd
-
-# Example time series
-ts = ts_df_filled  # Your time series data (must be a pandas Series or DataFrame)
-
-# --- Train Optimal SARIMA ---
-model_optimal = SARIMAX(ts, order=(1,1,1), seasonal_order=(1,1,1,12))
-fit_optimal = model_optimal.fit(disp=False)
-pred_optimal = fit_optimal.fittedvalues
-
-rmse_optimal = np.sqrt(mean_squared_error(ts, pred_optimal))
-mae_optimal = mean_absolute_error(ts, pred_optimal)
-
-# --- Train SARIMAX (with Exogenous variable if available) ---
-# For now we’ll just reuse SARIMA if no exogenous data
-model_sarimax = SARIMAX(ts, order=(1,1,1), seasonal_order=(1,1,1,12))
-fit_sarimax = model_sarimax.fit(disp=False)
-pred_sarimax = fit_sarimax.fittedvalues
-
-rmse_sarimax = np.sqrt(mean_squared_error(ts, pred_sarimax))
-mae_sarimax = mean_absolute_error(ts, pred_sarimax)
-
-# --- Prepare Prophet ---
-prophet_df = ts.reset_index()
-prophet_df.columns = ['ds', 'y']
-
-model_prophet = Prophet()
-model_prophet.fit(prophet_df)
 
 # Tabs (main)
 tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Model Comparison"])
@@ -699,72 +667,105 @@ with tabs[4]:
             st.error(f"❌ Could not train severity model: {e}")
 
 # ------------------------------
-# Time Series Model Evaluation & Comparison
+# Time Series (SARIMA)
 # ------------------------------
-st.subheader("📈 Time Series Model Evaluation")
-
-try:
-    # ✅ Make sure Prophet model exists before using it
-    if 'model_prophet' in locals() and 'prophet_df' in locals():
-        forecast_prophet = model_prophet.predict(prophet_df[['ds']])
-        prophet_fitted_values = forecast_prophet.set_index('ds')['yhat'].reindex(ts_df_filled.index)
-
-        # Compute metrics for Prophet
-        rmse_prophet = np.sqrt(mean_squared_error(ts_df_filled, prophet_fitted_values))
-        mae_prophet = mean_absolute_error(ts_df_filled, prophet_fitted_values)
+with tabs[5]:
+    st.header("Time Series Forecasting (SARIMA)")
+    if 'df' not in locals():
+        st.warning("Do data cleaning first.")
     else:
-        rmse_prophet = np.nan
-        mae_prophet = np.nan
-        st.warning("⚠️ Prophet model not available yet. Skipping Prophet evaluation.")
-    
-    # ✅ Check if other model metrics exist
-    if 'rmse_optimal' in locals() and 'rmse_sarimax' in locals():
-        comparison_df = pd.DataFrame({
-            "Model": ["Optimal SARIMA", "SARIMAX (with Exog)", "Prophet"],
-            "RMSE": [rmse_optimal, rmse_sarimax, rmse_prophet],
-            "MAE": [mae_optimal, mae_sarimax, mae_prophet]
-        })
+        st.markdown("This section resamples Water Level to daily average, checks stationarity, fits an example SARIMA, and shows forecasts.")
 
-        st.markdown("### 📊 Model Performance Results")
-        st.dataframe(
-            comparison_df.style.highlight_min(subset=["RMSE", "MAE"], color="#8ef"),
-            use_container_width=True
-        )
-
-        # --- Plot Comparison ---
-        st.markdown("### 🔍 Visual Comparison of RMSE and MAE")
-        fig = px.bar(
-            comparison_df.melt(id_vars="Model", var_name="Metric", value_name="Value"),
-            x="Model",
-            y="Value",
-            color="Metric",
-            barmode="group",
-            text_auto=".4f",
-            title="📉 Model Performance Comparison (Lower = Better)",
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-
-        fig.update_layout(
-            yaxis_title="Error Value",
-            xaxis_title="Model",
-            title_x=0.5,
-            legend_title="Performance Metric",
-            template="plotly_white"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        # --- Best Model Identification ---
-        if comparison_df["RMSE"].notna().any():
-            best_model = comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Model']
-            st.success(f"✅ Based on RMSE, the **best performing model** is: **{best_model}**")
+        # create datetime index if possible
+        df_temp = create_datetime_index(df)
+        if not isinstance(df_temp.index, pd.DatetimeIndex):
+            st.error("Your dataset doesn't have usable Year/Month/Day date parts to form a time index. Add Year/Month/Day columns for time series forecasting.")
         else:
-            st.info("No model metrics available yet.")
-    else:
-        st.warning("⚠️ SARIMA models not yet available. Please train them first.")
+            ts = df_temp['Water Level'].resample('D').mean()
+            ts_filled = ts.fillna(method='ffill').fillna(method='bfill')
 
-except Exception as e:
-    st.error(f"❌ Error during model comparison: {e}")
+            st.subheader("Time series preview (daily avg)")
+            fig = px.line(ts_filled, title="Daily average Water Level")
+            st.plotly_chart(fig, use_container_width=True)
+
+            if show_explanations:
+                st.markdown("**Explanation:** The data is resampled to daily averages, filling missing gaps to make it continuous for SARIMA modeling.")
+
+            # ADF test
+            st.subheader("Stationarity test (ADF)")
+            try:
+                adf_result = adfuller(ts_filled.dropna())
+                st.write(f"ADF Statistic: {adf_result[0]:.4f}")
+                st.write(f"P-value: {adf_result[1]:.4f}")
+                st.write("If p-value > 0.05, the series is likely non-stationary — differencing recommended.")
+            except Exception as e:
+                st.error(f"ADF test failed: {e}")
+                adf_result = (None, 1.0)
+
+            d = 0
+            if adf_result[1] > 0.05:
+                d = 1
+                ts_diff = ts_filled.diff().dropna()
+                fig = px.line(ts_diff, title="First-order differenced series")
+                st.plotly_chart(fig, use_container_width=True)
+
+            # ACF/PACF
+            st.subheader("ACF & PACF (help pick p/q values)")
+            try:
+                fig_acf = plt.figure(figsize=(10,4))
+                plot_acf(ts_filled.dropna(), lags=40, ax=fig_acf.gca())
+                st.pyplot(fig_acf)
+
+                fig_pacf = plt.figure(figsize=(10,4))
+                plot_pacf(ts_filled.dropna(), lags=40, ax=fig_pacf.gca())
+                st.pyplot(fig_pacf)
+            except Exception as e:
+                st.error(f"Plot failed: {e}")
+
+            # Fit SARIMA
+            st.subheader("Fit example SARIMA model")
+            with st.spinner("Fitting SARIMA (may take a moment)..."):
+                try:
+                    order = (1, d, 1)
+                    seasonal_order = (1, 0, 1, 7)
+                    model_sarima = SARIMAX(
+                        ts_filled,
+                        order=order,
+                        seasonal_order=seasonal_order,
+                        enforce_stationarity=False,
+                        enforce_invertibility=False
+                    )
+                    results = model_sarima.fit(disp=False)
+
+                    summary_table = results.summary().tables[1]
+                    import io
+                    summary_df = pd.read_csv(io.StringIO(summary_table.as_csv()))
+                    st.dataframe(summary_df, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"SARIMA fit failed: {e}")
+                    results = None
+
+            # Forecast
+            steps = st.slider("Forecast horizon (days)", 7, 365, 30)
+            try:
+                if results is not None:
+                    pred = results.get_forecast(steps=steps)
+                    pred_mean = pred.predicted_mean
+                    pred_ci = pred.conf_int()
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=ts_filled.index, y=ts_filled, name='Observed'))
+                    fig.add_trace(go.Scatter(x=pred_mean.index, y=pred_mean, name='Forecast'))
+                    fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,0], fill=None, mode='lines', line=dict(width=0)))
+                    fig.add_trace(go.Scatter(x=pred_ci.index, y=pred_ci.iloc[:,1], fill='tonexty', name='95% CI', mode='lines', line=dict(width=0)))
+                    fig.update_layout(title="SARIMA Forecast", xaxis_title="Date", yaxis_title="Water Level")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.error("No SARIMA results available to forecast.")
+            except Exception as e:
+                st.error(f"Forecast failed: {e}")
+
 
 # ------------------------------
 # Model Comparison Tab (Visual Format)
@@ -883,6 +884,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
