@@ -232,6 +232,38 @@ uploaded_file = st.sidebar.file_uploader("Upload flood CSV", type=['csv','txt','
 use_example = st.sidebar.checkbox("Use example dataset (if no upload)", value=False)
 plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index=0)
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
+from prophet import Prophet
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import numpy as np
+import pandas as pd
+
+# Example time series
+ts = ts_df_filled  # Your time series data (must be a pandas Series or DataFrame)
+
+# --- Train Optimal SARIMA ---
+model_optimal = SARIMAX(ts, order=(1,1,1), seasonal_order=(1,1,1,12))
+fit_optimal = model_optimal.fit(disp=False)
+pred_optimal = fit_optimal.fittedvalues
+
+rmse_optimal = np.sqrt(mean_squared_error(ts, pred_optimal))
+mae_optimal = mean_absolute_error(ts, pred_optimal)
+
+# --- Train SARIMAX (with Exogenous variable if available) ---
+# For now we’ll just reuse SARIMA if no exogenous data
+model_sarimax = SARIMAX(ts, order=(1,1,1), seasonal_order=(1,1,1,12))
+fit_sarimax = model_sarimax.fit(disp=False)
+pred_sarimax = fit_sarimax.fittedvalues
+
+rmse_sarimax = np.sqrt(mean_squared_error(ts, pred_sarimax))
+mae_sarimax = mean_absolute_error(ts, pred_sarimax)
+
+# --- Prepare Prophet ---
+prophet_df = ts.reset_index()
+prophet_df.columns = ['ds', 'y']
+
+model_prophet = Prophet()
+model_prophet.fit(prophet_df)
 
 # Tabs (main)
 tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Model Comparison"])
@@ -851,6 +883,7 @@ with tabs[6]:
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
 st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
+
 
 
 
