@@ -1,7 +1,7 @@
-  # app.py
+# app.py
 # Flood Pattern Data Mining & Forecasting - Streamlit Port of floodpatternv2.ipynb
 # Interactive Plotly charts + automatic explanations below each output
-# Author: ChatGPT (converted for Streamlit)
+# Author: ChatGPT (converted for Streamlit) - enhanced uniform distribution & balancing options
 # Usage: streamlit run app.py
 
 import streamlit as st
@@ -19,11 +19,18 @@ from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import matplotlib.pyplot as plt
 import warnings
+from sklearn.utils import resample
+
 warnings.filterwarnings("ignore")
+
 # ================== LOAD LOCAL CSS ==================
 def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    try:
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except Exception:
+        # ignore if CSS not present
+        pass
 
 local_css("style.css")
 # ====================================================
@@ -44,31 +51,20 @@ def clean_water_level(series):
 
 def clean_damage_col(col):
     s = col.astype(str).str.replace(',', '', regex=False)
-    # fix weird patterns like '422.510.5' -> '4225105' if present
     s = s.str.replace(r'(\d)\.(\d)\.(\d)', lambda m: m.group(1)+m.group(2)+m.group(3), regex=True)
     s = pd.to_numeric(s, errors='coerce')
     return s
 
 def _find_col(df, candidate_lower):
-    """
-    Return actual column name in df that matches candidate_lower (case-insensitive),
-    or None if not found.
-    """
     for c in df.columns:
         if c.strip().lower() == candidate_lower:
             return c
     return None
 
 def load_and_basic_clean(df):
-    # Work on a copy
     df = df.copy()
-
-    # Normalize whitespace in column names (but keep original casing to avoid breaking other code)
     df.columns = [c.strip() for c in df.columns]
 
-    # Create canonical column names (if any variant exists)
-    # We'll create/overwrite canonical names: Year, Month, Month_Num, Day, Water Level, No. of Families affected, Damage Infrastructure, Damage Agriculture, Municipality, Barangay
-    # The rest of your app expects those canonical names.
     col_map = {
         'year': _find_col(df, 'year'),
         'month': _find_col(df, 'month'),
@@ -82,7 +78,6 @@ def load_and_basic_clean(df):
         'barangay': _find_col(df, 'barangay')
     }
 
-    # Copy found columns into canonical names (only if found)
     if col_map['year'] is not None:
         df['Year'] = df[col_map['year']]
     if col_map['month'] is not None:
@@ -104,76 +99,51 @@ def load_and_basic_clean(df):
     if col_map['barangay'] is not None:
         df['Barangay'] = df[col_map['barangay']]
 
-    # Standardize Month to uppercase names if exists
     if 'Month' in df.columns:
         df['Month'] = df['Month'].astype(str).str.strip().str.upper().replace({'NAN': pd.NA})
 
-    # If Month_Num wasn't provided but Month names are, map names to numbers
     if 'Month_Num' not in df.columns and 'Month' in df.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         df['Month_Num'] = df['Month'].map(month_map)
 
-    # Clean water level if present
     if 'Water Level' in df.columns:
         df['Water Level'] = clean_water_level(df['Water Level'])
-        # If too many missing, leave them but otherwise impute with median
         if df['Water Level'].notna().sum() > 0:
             median_wl = df['Water Level'].median()
             df['Water Level'] = df['Water Level'].fillna(median_wl)
 
-    # Families affected
     if 'No. of Families affected' in df.columns:
         df['No. of Families affected'] = pd.to_numeric(df['No. of Families affected'].astype(str).str.replace(',', ''), errors='coerce')
         if df['No. of Families affected'].notna().sum() > 0:
             df['No. of Families affected'] = df['No. of Families affected'].fillna(df['No. of Families affected'].median())
 
-    # Damage columns
     for col in ['Damage Infrastructure', 'Damage Agriculture']:
         if col in df.columns:
             df[col] = clean_damage_col(df[col])
             df[col] = df[col].fillna(0)
 
-    # Ensure Year/Month_Num/Day are numeric-ish (coerce bad ones)
     for c in ['Year','Month_Num','Day']:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
-
-    # Try to fill forward/backward small gaps in date parts but avoid forcing wrong values:
-    # Only forward/backfill when reasonable (e.g., repeated measurements across rows)
-    for c in ['Year','Month_Num','Day']:
-        if c in df.columns:
-            # attempt forward then backward fill but only for short gaps
             df[c] = df[c].ffill().bfill()
 
     return df
 
 def create_datetime_index(df):
-    """
-    Create a DatetimeIndex if Year/Month_Num/Day (canonical names) exist or Month name + Year + Day exist.
-    Returns a dataframe with a Date index if possible; otherwise returns the original df.
-    This function is robust: it coerces non-numeric parts, drops rows that still can't form valid dates,
-    and avoids integer-casting errors by using pd.to_datetime with dict input.
-    """
     tmp = df.copy()
-
-    # If Month exists but Month_Num doesn't, try mapping (safe)
     if 'Month' in tmp.columns and 'Month_Num' not in tmp.columns:
         month_map = {'JANUARY':1,'FEBRUARY':2,'MARCH':3,'APRIL':4,'MAY':5,'JUNE':6,
                      'JULY':7,'AUGUST':8,'SEPTEMBER':9,'OCTOBER':10,'NOVEMBER':11,'DECEMBER':12}
         tmp['Month_Num'] = tmp['Month'].astype(str).str.strip().str.upper().map(month_map)
 
-    # Ensure we have at least Year and something for month/day
     if not ({'Year', 'Month_Num', 'Day'}.issubset(tmp.columns)):
-        # Not enough parts to build a date index
         return df
 
-    # Coerce to numeric, leaving invalid as NaN
     tmp['Year'] = pd.to_numeric(tmp['Year'], errors='coerce')
     tmp['Month_Num'] = pd.to_numeric(tmp['Month_Num'], errors='coerce')
     tmp['Day'] = pd.to_numeric(tmp['Day'], errors='coerce')
 
-    # Drop rows where essential parts are missing - can't build a date
     before = len(tmp)
     tmp = tmp.dropna(subset=['Year', 'Month_Num', 'Day']).copy()
     dropped = before - len(tmp)
@@ -183,16 +153,12 @@ def create_datetime_index(df):
     if tmp.empty:
         return df
 
-    # Convert to integer where safe
-    # (they're floats because of NaNs; cast after dropping NaNs)
     tmp['Year'] = tmp['Year'].astype(int)
     tmp['Month_Num'] = tmp['Month_Num'].astype(int)
     tmp['Day'] = tmp['Day'].astype(int)
 
-    # Now build Date column using dict -> safe assembly
     tmp['Date'] = pd.to_datetime({'year': tmp['Year'], 'month': tmp['Month_Num'], 'day': tmp['Day']}, errors='coerce')
 
-    # Drop rows where to_datetime still failed (e.g., Day=31 and Month=2)
     before2 = len(tmp)
     tmp = tmp.dropna(subset=['Date']).copy()
     dropped2 = before2 - len(tmp)
@@ -220,33 +186,69 @@ def categorize_severity(w):
         return 'High'
 
 # ------------------------------
+# Balancing helper
+# ------------------------------
+def balance_by_column(df, col, n_samples=None, method='upsample', random_state=42):
+    """
+    Balance df by column `col` categories (values or bins).
+    method: 'upsample' or 'downsample'
+    n_samples: if None, uses max (for upsample) or min (for downsample)
+    Returns a new balanced dataframe (shuffled).
+    """
+    df = df.copy()
+    counts = df[col].value_counts()
+    if len(counts) == 0:
+        return df
+    if n_samples is None:
+        n_samples = counts.max() if method == 'upsample' else counts.min()
+    groups = []
+    for val, cnt in counts.items():
+        group = df[df[col] == val]
+        if cnt == 0:
+            continue
+        if method == 'upsample' and cnt < n_samples:
+            grp = resample(group, replace=True, n_samples=n_samples, random_state=random_state)
+        elif method == 'downsample' and cnt > n_samples:
+            grp = resample(group, replace=False, n_samples=n_samples, random_state=random_state)
+        else:
+            grp = group
+        groups.append(grp)
+    if not groups:
+        return df
+    balanced = pd.concat(groups).sample(frac=1, random_state=random_state).reset_index(drop=True)
+    return balanced
+
+# ------------------------------
 # UI Layout
 # ------------------------------
 st.title("🌊 Flood Pattern Data Mining & Forecasting 🌊")
-st.markdown("Upload your CSV (like `FloodDataMDRRMO.csv`) and explore the analyses. "
-            "This app runs cleaning, EDA, KMeans clustering, RandomForest prediction, and SARIMA forecasting. Explanations appear under each output.")
+st.markdown("Upload a CSV/Excel (e.g. FloodDataMDRRMO.csv) — explore cleaning, EDA, clustering, prediction & forecasting. Toggle uniform/balancing options in the sidebars.")
 
 # Sidebar: file upload & options
 st.sidebar.header("Upload & Options")
-uploaded_file = st.sidebar.file_uploader("Upload flood CSV", type=['csv','txt','xlsx'])
+uploaded_file = st.sidebar.file_uploader("Upload flood CSV/Excel", type=['csv','txt','xlsx'])
 use_example = st.sidebar.checkbox("Use example dataset (if no upload)", value=False)
 plotly_mode = st.sidebar.selectbox("Plot style", ["plotly (interactive)"], index=0)
 show_explanations = st.sidebar.checkbox("Show explanations below outputs", value=True)
+
+# Additional balancing options in sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Uniform & Balancing defaults**")
+default_equalfreq_bins = st.sidebar.number_input("Default equal-frequency bins (for quick run)", min_value=3, max_value=20, value=6)
+st.sidebar.markdown("---")
 
 # Tabs (main)
 tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Flood Prediction (RF)", "Flood Severity", "Time Series (SARIMA)", "Model Comparison"])
 
 # ------------------------------
-# 🌊 Data Upload Tab
+# Data Upload Tab
 # ------------------------------
 with tabs[0]:
     st.markdown("<h2 class='main-title'>📂 Data Upload & Overview</h2>", unsafe_allow_html=True)
 
-    # --- 1️⃣ Upload Instructions ---
     if uploaded_file is None and not use_example:
-        st.info("📤 Please upload a CSV or Excel file to begin, or toggle **'Use example dataset'** in the sidebar.")
+        st.info("📤 Please upload a CSV/Excel to begin, or toggle **'Use example dataset'**.")
     else:
-        # --- 2️⃣ Load Uploaded or Example Data ---
         if uploaded_file is not None:
             try:
                 file_name = uploaded_file.name
@@ -254,14 +256,12 @@ with tabs[0]:
                     df_raw = pd.read_excel(uploaded_file)
                 else:
                     df_raw = pd.read_csv(uploaded_file)
-
                 st.success(f"✅ Loaded **{file_name}** — **{df_raw.shape[0]:,} rows**, **{df_raw.shape[1]} columns**.")
             except Exception as e:
                 st.error(f"❌ Failed to read file: {e}")
                 st.stop()
         else:
-            # Example dataset for demonstration
-            st.warning("⚠️ Using a **synthetic example dataset** (for testing only). Upload your real file for accurate results.")
+            st.warning("⚠️ Using a **synthetic example dataset** for demo. Upload your real file for accurate results.")
             df_raw = pd.DataFrame({
                 'Year': [2018, 2018, 2019, 2019, 2020, 2020],
                 'Month': ['JANUARY', 'FEBRUARY', 'DECEMBER', 'FEBRUARY', 'MAY', 'NOVEMBER'],
@@ -274,12 +274,9 @@ with tabs[0]:
                 'Damage Infrastructure': ['0', '0', '1,000', '5,000', '0', '0'],
                 'Damage Agriculture': ['0', '0', '422.510.5', '10,000', '0', '0']
             })
-
-            # Example data preview
             st.markdown("### 🧾 Example Data Preview")
             st.dataframe(df_raw.head(), use_container_width=True)
 
-        # --- 3️⃣ Data Summary ---
         st.markdown("### 📊 Dataset Overview")
         info_col1, info_col2 = st.columns(2)
         with info_col1:
@@ -287,11 +284,9 @@ with tabs[0]:
         with info_col2:
             st.metric("📈 Total Columns", f"{df_raw.shape[1]}")
 
-        # --- 4️⃣ Raw Data Preview (Expandable) ---
         with st.expander("🔍 View Raw Data (First 50 Rows)"):
             st.dataframe(df_raw.head(50), use_container_width=True)
 
-        # --- 5️⃣ Column List ---
         st.markdown("### 🧩 Column Names")
         col_df = pd.DataFrame({
             "Column Name": df_raw.columns,
@@ -308,59 +303,59 @@ with tabs[1]:
         st.warning("Upload a dataset first in the Data Upload tab.")
     else:
         df = load_and_basic_clean(df_raw)
+        # create flood_occurred if not present
+        if 'flood_occurred' not in df.columns:
+            df['flood_occurred'] = (df['Water Level'].fillna(0) > 0).astype(int)
+
         st.subheader("After basic cleaning (head):")
         st.dataframe(df.head(10))
 
-        # Basic stats
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-        # Water Level distribution (Plotly)
+        # Water Level distribution (Plotly) with equal-frequency option
         if 'Water Level' in df.columns:
             st.subheader("Water Level distribution")
-            fig = px.histogram(
-                df,
-                x='Water Level',
-                nbins=30,
-                marginal="box",
-                title="Distribution of Cleaned Water Level"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            use_equalfreq = st.checkbox("Use equal-frequency bins (quantile bins) for Water Level", value=False)
+            if use_equalfreq:
+                n_bins = st.slider("Equal-frequency bins (k)", 3, 20, int(default_equalfreq_bins))
+                wl = df['Water Level'].dropna()
+                if wl.empty:
+                    st.warning("No numeric Water Level values available for equal-frequency binning.")
+                else:
+                    try:
+                        df['WL_bin_eqfreq'] = pd.qcut(wl, q=n_bins, duplicates='drop')
+                        bin_counts = df.groupby('WL_bin_eqfreq').size().reset_index(name='count')
+                        bin_counts['bin_str'] = bin_counts['WL_bin_eqfreq'].astype(str)
+                        fig = px.bar(bin_counts, x='bin_str', y='count', title=f"Water Level (equal-frequency, {len(bin_counts)} bins)")
+                        fig.update_layout(xaxis_tickangle=45, xaxis_title="Water Level bin (equal-frequency)", yaxis_title="Count")
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Could not create equal-frequency bins: {e}")
+            else:
+                fig = px.histogram(df, x='Water Level', nbins=30, marginal="box", title="Distribution of Cleaned Water Level")
+                st.plotly_chart(fig, use_container_width=True)
+
             if show_explanations:
                 st.markdown("""
-                **Explanation:**  
-                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-                and filling missing values with the median.  
-                The boxplot margin highlights potential outliers.  
-                Use this to detect skew and extreme flood events.
+                **Note:** Equal-frequency (quantile) bins give roughly the same number of records per bin — good for comparing ranges with uniform counts.
                 """)
 
-        # ------------------------------
-        # Monthly flood probability (fixed)
-        # ------------------------------
+        # Monthly flood probability with equal-sample option
         if 'Month' in df.columns:
-            # create flood_occurred column if not exists
-            if 'flood_occurred' not in df.columns:
-                df['flood_occurred'] = (df['Water Level'].fillna(0) > 0).astype(int)
-
             st.subheader("Monthly Flood Probability")
-
-            # month mapping
             month_map = {
                 1: 'January', 2: 'February', 3: 'March', 4: 'April',
                 5: 'May', 6: 'June', 7: 'July', 8: 'August',
                 9: 'September', 10: 'October', 11: 'November', 12: 'December'
             }
 
-            # clean and convert month formats
             def clean_month(val):
                 try:
                     val_str = str(val).strip().lower()
-                    # numeric (1–12 or '01')
                     if val_str.isdigit():
                         num = int(val_str)
                         return month_map.get(num, np.nan)
-                    # short text (jan, feb, mar…)
                     for num, name in month_map.items():
                         if val_str.startswith(name[:3].lower()):
                             return name
@@ -370,87 +365,81 @@ with tabs[1]:
 
             df['Month_clean'] = df['Month'].apply(clean_month)
             df = df.dropna(subset=['Month_clean'])
-
-            # compute monthly stats
-            m_stats = df.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
-            m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
-
-            # keep months in correct order
-            m_stats['Month_clean'] = pd.Categorical(
-                m_stats['Month_clean'],
-                categories=list(month_map.values()),
-                ordered=True
-            )
-            m_stats = m_stats.sort_values('Month_clean')
-
-            # bar chart
-            fig = px.bar(
-                m_stats,
-                x='Month_clean',
-                y='probability',
-                title="Flood Probability by Month",
-                text='probability'
-            )
-            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
-
-            st.plotly_chart(fig, use_container_width=True)
+            equal_sample_month = st.checkbox("Equal-sample per month (sample each month to same size) for probability", value=False)
+            if equal_sample_month:
+                group_col = 'Month_clean'
+                group_sizes = df.groupby(group_col).size()
+                min_size = int(group_sizes.min()) if not group_sizes.empty else 0
+                if min_size <= 0:
+                    st.warning("Not enough samples per month to equalize.")
+                else:
+                    df_eq = df.groupby(group_col).apply(lambda g: g.sample(n=min_size, random_state=42)).reset_index(drop=True)
+                    m_stats = df_eq.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
+                    m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
+                    m_stats['Month_clean'] = pd.Categorical(m_stats['Month_clean'], categories=list(month_map.values()), ordered=True)
+                    m_stats = m_stats.sort_values('Month_clean')
+                    fig = px.bar(m_stats, x='Month_clean', y='probability', title="Flood Probability by Month (equal-sample per month)", text='probability')
+                    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                m_stats = df.groupby('Month_clean')['flood_occurred'].agg(['sum', 'count']).reset_index()
+                m_stats['probability'] = (m_stats['sum'] / m_stats['count']).round(3)
+                m_stats['Month_clean'] = pd.Categorical(m_stats['Month_clean'], categories=list(month_map.values()), ordered=True)
+                m_stats = m_stats.sort_values('Month_clean')
+                fig = px.bar(m_stats, x='Month_clean', y='probability', title="Flood Probability by Month", text='probability')
+                fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                fig.update_layout(xaxis_title="Month", yaxis_title="Flood Probability")
+                st.plotly_chart(fig, use_container_width=True)
 
             if show_explanations:
                 st.markdown("""
-                **Explanation:**  
-                This chart shows the chance of flooding per month.  
-                - **Probability = Flood occurrences / Total records in that month**  
-                Months with higher bars indicate higher flood risk periods.  
+                **Explanation:** Probability = Flood occurrences / Total records in that month.
+                Equal-sample option uses the same sample count per month so bars are computed from equal-sized groups.
                 """)
-        # ------------------------------
-        # Municipal flood probabilities
-        # ------------------------------
+
+        # Municipality & Barangay with equal-sample options
         if 'Municipality' in df.columns:
             st.subheader("Flood probability by Municipality")
-            mun = df.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
+            equal_sample_muni = st.checkbox("Equal-sample per Municipality", key='eq_muni', value=False)
+            if equal_sample_muni:
+                group_col = 'Municipality'
+                group_sizes = df.groupby(group_col).size()
+                min_size = int(group_sizes.min()) if not group_sizes.empty else 0
+                if min_size <= 0:
+                    st.warning("Not enough municipality samples to equalize.")
+                    mun = df.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
+                else:
+                    df_eq_m = df.groupby(group_col).apply(lambda g: g.sample(n=min_size, random_state=42)).reset_index(drop=True)
+                    mun = df_eq_m.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
+            else:
+                mun = df.groupby('Municipality')['flood_occurred'].agg(['sum','count']).reset_index()
             mun['probability'] = (mun['sum'] / mun['count']).round(3)
             mun = mun.sort_values('probability', ascending=False)
-            fig = px.bar(
-                mun,
-                x='Municipality',
-                y='probability',
-                title="Flood Probability by Municipality",
-                text='probability'
-            )
+            fig = px.bar(mun, x='Municipality', y='probability', title="Flood Probability by Municipality", text='probability')
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Municipality", yaxis_title="Flood Probability")
             st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This helps identify which municipalities historically experience more flooding,
-                guiding local preparedness and response planning.
-                """)
-         # ------------------------------
-        # Barangay flood probabilities
-        # ------------------------------
+
         if 'Barangay' in df.columns:
             st.subheader("Flood probability by Barangay")
-            mun = df.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
-            mun['probability'] = (mun['sum'] / mun['count']).round(3)
-            mun = mun.sort_values('probability', ascending=False)
-            fig = px.bar(
-                mun,
-                x='Barangay',
-                y='probability',
-                title="Flood Probability by Barangay",
-                text='probability'
-            )
+            equal_sample_brgy = st.checkbox("Equal-sample per Barangay", key='eq_brgy', value=False)
+            if equal_sample_brgy:
+                group_col = 'Barangay'
+                group_sizes = df.groupby(group_col).size()
+                min_size = int(group_sizes.min()) if not group_sizes.empty else 0
+                if min_size <= 0:
+                    st.warning("Not enough barangay samples to equalize.")
+                    brgy = df.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
+                else:
+                    df_eq_b = df.groupby(group_col).apply(lambda g: g.sample(n=min_size, random_state=42)).reset_index(drop=True)
+                    brgy = df_eq_b.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
+            else:
+                brgy = df.groupby('Barangay')['flood_occurred'].agg(['sum','count']).reset_index()
+            brgy['probability'] = (brgy['sum'] / brgy['count']).round(3)
+            brgy = brgy.sort_values('probability', ascending=False)
+            fig = px.bar(brgy, x='Barangay', y='probability', title="Flood Probability by Barangay", text='probability')
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(xaxis_title="Barangay", yaxis_title="Flood Probability")
             st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This helps identify which Barangay historically experience more flooding,
-                guiding local preparedness and response planning.
-                """)
+
 # ------------------------------
 # Clustering Tab (KMeans)
 # ------------------------------
@@ -459,208 +448,234 @@ with tabs[2]:
     if 'df' not in locals():
         st.warning("Do data cleaning first.")
     else:
-        # Select features for clustering
         features = ['Water Level','No. of Families affected','Damage Infrastructure','Damage Agriculture']
         if not set(features).issubset(df.columns):
             st.error("Missing required columns for clustering.")
         else:
             st.subheader("KMeans clustering (k=3 default)")
             k = st.slider("Number of clusters (k)", 2, 6, 3)
-            X_cluster = df[features].fillna(0)
+            cluster_balance_toggle = st.checkbox("Balance data before clustering by WL quantile buckets", value=False)
+            if cluster_balance_toggle:
+                n_buckets_cluster = st.slider("Buckets to balance by (quantiles) for clustering", 3, 10, 5)
+                df_tmp = df.copy()
+                try:
+                    df_tmp['WL_bucket'] = pd.qcut(df_tmp['Water Level'].fillna(df_tmp['Water Level'].median()), q=n_buckets_cluster, duplicates='drop').astype(str)
+                    df_bal_cluster = balance_by_column(df_tmp, 'WL_bucket', method='upsample')
+                except Exception:
+                    df_bal_cluster = df.copy()
+                    st.warning("Quantile bucket balancing failed; using original dataset for clustering.")
+                X_cluster = df_bal_cluster[features].fillna(0)
+            else:
+                X_cluster = df[features].fillna(0)
+
             kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X_cluster)
-            df['Cluster'] = kmeans.labels_
-            counts = df['Cluster'].value_counts().sort_index()
-            st.write("Cluster counts:")
-            st.write(counts)
+            # map labels back to original df (best-effort - if we balanced, use balanced df's labels)
+            if cluster_balance_toggle:
+                df_bal_cluster['Cluster'] = kmeans.labels_
+                counts = df_bal_cluster['Cluster'].value_counts().sort_index()
+                st.write("Cluster counts (on balanced dataset):")
+                st.write(counts)
+                fig = px.scatter_3d(df_bal_cluster, x='Water Level', y='No. of Families affected', z='Damage Infrastructure',
+                                    color='Cluster', hover_data=['Barangay','Municipality','Flood Cause'],
+                                    title="KMeans clusters (3D) — balanced input")
+            else:
+                df['Cluster'] = kmeans.labels_
+                counts = df['Cluster'].value_counts().sort_index()
+                st.write("Cluster counts:")
+                st.write(counts)
+                fig = px.scatter_3d(df, x='Water Level', y='No. of Families affected', z='Damage Infrastructure',
+                                    color='Cluster', hover_data=['Barangay','Municipality','Flood Cause'],
+                                    title="KMeans clusters (3D)")
 
-            # 3d scatter (Plotly)
-            fig = px.scatter_3d(df, x='Water Level', y='No. of Families affected', z='Damage Infrastructure',
-                                color='Cluster', hover_data=['Barangay','Municipality','Flood Cause'],
-                                title="KMeans clusters (3D)")
             st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("**Explanation:** KMeans grouped flood events into clusters based on severity variables. Use the cluster distribution and 3D scatter to inspect which events are low vs high impact.")
 
-            # cluster summary
             st.subheader("Cluster summary (numeric medians)")
-            cluster_summary = df.groupby('Cluster')[features].median().round(2)
+            if cluster_balance_toggle:
+                cluster_summary = df_bal_cluster.groupby('Cluster')[features].median().round(2)
+            else:
+                cluster_summary = df.groupby('Cluster')[features].median().round(2)
             st.dataframe(cluster_summary)
-            if show_explanations:
-                st.markdown("**Explanation:** Median values per cluster describe representative severity per cluster (water depth, families affected, damages). Useful to label clusters as 'low/medium/high' impact.")
 
 # ------------------------------
 # Flood Prediction (RandomForest) Tab
 # ------------------------------
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
-import pandas as pd
-import plotly.express as px
-import matplotlib.pyplot as plt
-import streamlit as st
-
 with tabs[3]:
     st.header("🌊 Flood Occurrence Prediction — RandomForest")
 
     if 'df' not in locals():
         st.warning("⚠️ Please run data cleaning first.")
     else:
-        st.markdown("We train a **RandomForest** model to predict `flood_occurred` based on water level and damage data.")
+        st.markdown("We train a **RandomForest** model to predict `flood_occurred`. Toggle balancing for training data below.")
 
         # Create target variable (1 = flood occurred)
         df['flood_occurred'] = (df['Water Level'] > 0).astype(int)
 
+        # Balancing options
+        st.markdown("### Optional: balance dataset before training")
+        balance_toggle = st.checkbox("Balance dataset by Water Level quantile buckets (affects training data)", value=False)
+        if balance_toggle:
+            n_buckets = st.slider("Buckets to balance by (quantiles)", 3, 10, 5)
+            method = st.selectbox("Balance method", ['upsample', 'downsample'])
+            try:
+                df_tmp = df.copy()
+                df_tmp['WL_bucket'] = pd.qcut(df_tmp['Water Level'].fillna(df_tmp['Water Level'].median()), q=n_buckets, duplicates='drop').astype(str)
+                df_bal = balance_by_column(df_tmp, 'WL_bucket', method=method)
+                st.success(f"Balanced dataset created: {df_bal.shape[0]} rows ({method}).")
+            except Exception as e:
+                st.error(f"Balancing failed: {e}")
+                df_bal = df.copy()
+        else:
+            df_bal = df.copy()
+
         # Feature engineering (numeric + month dummies)
-        month_dummies = pd.get_dummies(df['Month'].astype(str).fillna('Unknown'), prefix='Month')
+        month_dummies = pd.get_dummies(df_bal['Month'].astype(str).fillna('Unknown'), prefix='Month')
         X_basic = pd.concat([
-            df[['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']].fillna(0),
+            df_bal[['Water Level', 'No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']].fillna(0),
             month_dummies
         ], axis=1)
-        y = df['flood_occurred']
+        y = df_bal['flood_occurred']
 
         # Split data
-        Xtr, Xte, ytr, yte = train_test_split(X_basic, y, test_size=0.3, random_state=42)
+        try:
+            Xtr, Xte, ytr, yte = train_test_split(X_basic, y, test_size=0.3, random_state=42)
+        except Exception:
+            Xtr, Xte, ytr, yte = train_test_split(X_basic.fillna(0), y.fillna(0), test_size=0.3, random_state=42)
 
         # Train model
         model = RandomForestClassifier(random_state=42)
-        model.fit(Xtr, ytr)
-        ypred = model.predict(Xte)
-        acc = accuracy_score(yte, ypred)
+        try:
+            model.fit(Xtr, ytr)
+            ypred = model.predict(Xte)
+            acc = accuracy_score(yte, ypred)
+        except Exception as e:
+            st.error(f"Model training failed: {e}")
+            acc = 0.0
+            ypred = np.zeros_like(yte)
 
         # Accuracy + report
         st.subheader("📊 RandomForest Evaluation")
         st.table(pd.DataFrame({"Metric": ["Accuracy (test)"], "Value": [f"{acc:.4f}"]}))
 
-        report = classification_report(yte, ypred, output_dict=True)
-        st.markdown("### 📈 Classification Report")
-        st.table(pd.DataFrame(report).transpose().round(3))
+        try:
+            report = classification_report(yte, ypred, output_dict=True, zero_division=0)
+            st.markdown("### 📈 Classification Report")
+            st.table(pd.DataFrame(report).transpose().round(3))
+        except Exception:
+            st.info("No classification report available.")
 
         if show_explanations:
-            st.markdown("""
-            **🧠 Explanation:**  
-            RandomForest combines many decision trees to make predictions.  
-            Check class balance & overfitting if accuracy seems too high.
-            """)
+            st.markdown("**🧠 Explanation:** RandomForest combines many decision trees to make predictions. Check class balance if accuracy seems odd.")
 
         # Feature importances
-        fi = pd.Series(model.feature_importances_, index=X_basic.columns).sort_values(ascending=False).head(10)
-        st.subheader("🔥 Top Feature Importances")
-        st.bar_chart(fi)
-
-        if show_explanations:
-            st.markdown("**Explanation:** Higher importance = stronger effect on model prediction. Usually, `Water Level` dominates.")
+        try:
+            fi = pd.Series(model.feature_importances_, index=X_basic.columns).sort_values(ascending=False).head(10)
+            st.subheader("🔥 Top Feature Importances")
+            st.bar_chart(fi)
+        except Exception:
+            pass
 
         # --- Monthly Flood Probability (Raw Data) ---
-        st.subheader("📅 Monthly Flood Probabilities (from actual data)")
-        monthly_flood_counts = df.groupby('Month')['flood_occurred'].sum()
-        monthly_total_counts = df.groupby('Month')['flood_occurred'].count()
-        monthly_flood_probability = (monthly_flood_counts / monthly_total_counts).sort_values(ascending=False)
-
-        st.dataframe(monthly_flood_probability.rename("Flood Probability").round(3))
-        st.bar_chart(monthly_flood_probability)
+        st.subheader("📅 Monthly Flood Probabilities (actual data)")
+        try:
+            monthly_flood_counts = df.groupby('Month')['flood_occurred'].sum()
+            monthly_total_counts = df.groupby('Month')['flood_occurred'].count()
+            monthly_flood_probability = (monthly_flood_counts / monthly_total_counts).sort_values(ascending=False)
+            st.dataframe(monthly_flood_probability.rename("Flood Probability").round(3))
+            st.bar_chart(monthly_flood_probability)
+        except Exception:
+            st.info("Monthly probabilities can't be computed (missing Month).")
 
         # --- Predicted Flood Probabilities (Model-Based) ---
         if st.button("🔮 Show Predicted Flood Probability per Month (using median inputs)"):
-            median_vals = X_basic.median()
-            months = sorted(df['Month'].dropna().unique())
-            pred_rows = []
-
-            for m in months:
-                row = median_vals.copy()
-                # Set only one month dummy to 1
-                md = [c for c in X_basic.columns if c.startswith('Month_')]
-                for col in md:
-                    row[col] = 1 if col == f"Month_{m}" else 0
-                pred_rows.append(row.values)
-
-            Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-            probs = model.predict_proba(Xpred)[:, 1]
-            prob_df = pd.DataFrame({'Month': months, 'Predicted Probability': probs}).sort_values('Predicted Probability', ascending=False)
-
-            fig = px.bar(prob_df, x='Month', y='Predicted Probability',
-                         title="Predicted Flood Probability per Month (median inputs)",
-                         color='Predicted Probability', color_continuous_scale='Blues')
-            st.plotly_chart(fig, use_container_width=True)
-
-            if show_explanations:
-                st.markdown("""
-                **💡 Explanation:**  
-                This uses the **median values** of numeric features and swaps month dummies  
-                to estimate how flood likelihood changes across months.
-                """)
+            try:
+                median_vals = X_basic.median()
+                months = sorted(df['Month'].dropna().unique())
+                pred_rows = []
+                for m in months:
+                    row = median_vals.copy()
+                    md = [c for c in X_basic.columns if c.startswith('Month_')]
+                    for col in md:
+                        row[col] = 1 if col == f"Month_{m}" else 0
+                    pred_rows.append(row.values)
+                Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
+                probs = model.predict_proba(Xpred)[:, 1]
+                prob_df = pd.DataFrame({'Month': months, 'Predicted Probability': probs}).sort_values('Predicted Probability', ascending=False)
+                fig = px.bar(prob_df, x='Month', y='Predicted Probability',
+                             title="Predicted Flood Probability per Month (median inputs)",
+                             color='Predicted Probability', color_continuous_scale='Blues')
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
 
 # ------------------------------
 # Flood Severity Tab
 # ------------------------------
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
-import pandas as pd
-
 with tabs[4]:
     st.header("🌊 Flood Severity Classification")
 
     if 'df' not in locals():
         st.warning("⚠️ Please perform data cleaning first.")
     else:
-        # ---------------- CREATE TARGET COLUMN ----------------
         df['Flood_Severity'] = df['Water Level'].apply(categorize_severity)
 
-        # ---------------- SEVERITY DISTRIBUTION ----------------
         st.subheader("📊 Severity Distribution")
         sev_counts = df['Flood_Severity'].value_counts().reset_index()
         sev_counts.columns = ['Severity Level', 'Count']
         st.table(sev_counts)
 
-        # ---------------- FEATURE SETUP ----------------
         base_feats = ['No. of Families affected', 'Damage Infrastructure', 'Damage Agriculture']
         month_d = pd.get_dummies(df['Month'].astype(str).fillna('Unknown'), prefix='Month')
         muni_d = pd.get_dummies(df['Municipality'].astype(str).fillna('Unknown'), prefix='Municipality') if 'Municipality' in df.columns else pd.DataFrame()
         brgy_d = pd.get_dummies(df['Barangay'].astype(str).fillna('Unknown'), prefix='Barangay') if 'Barangay' in df.columns else pd.DataFrame()
-        Xsev = pd.concat([df[base_feats].fillna(0), month_d, muni_d, brgy_d], axis=1)
-        ysev = df['Flood_Severity']
 
-        # ---------------- CLASS BALANCE TABLE ----------------
+        st.markdown("### Optional: balance severity classes before training")
+        balance_sev = st.checkbox("Balance severity classes (Low/Medium/High)", value=False)
+        if balance_sev:
+            method_sev = st.selectbox("Severity balance method", ['upsample', 'downsample'], key='sev_method')
+            df_sev = df.copy()
+            df_sev['Flood_Severity'] = df_sev['Flood_Severity'].astype(str)
+            try:
+                df_sev_bal = balance_by_column(df_sev, 'Flood_Severity', method=method_sev)
+                st.write("Class counts after balancing:")
+                st.table(df_sev_bal['Flood_Severity'].value_counts().reset_index().rename(columns={'index':'Severity','Flood_Severity':'Count'}))
+            except Exception as e:
+                st.error(f"Severity balancing failed: {e}")
+                df_sev_bal = df.copy()
+        else:
+            df_sev_bal = df.copy()
+
+        month_d = pd.get_dummies(df_sev_bal['Month'].astype(str).fillna('Unknown'), prefix='Month')
+        muni_d = pd.get_dummies(df_sev_bal['Municipality'].astype(str).fillna('Unknown'), prefix='Municipality') if 'Municipality' in df_sev_bal.columns else pd.DataFrame()
+        brgy_d = pd.get_dummies(df_sev_bal['Barangay'].astype(str).fillna('Unknown'), prefix='Barangay') if 'Barangay' in df_sev_bal.columns else pd.DataFrame()
+
+        Xsev = pd.concat([df_sev_bal[base_feats].fillna(0), month_d, muni_d, brgy_d], axis=1)
+        ysev = df_sev_bal['Flood_Severity']
+
         st.subheader("⚖️ Class Counts")
         class_counts = ysev.value_counts().reset_index()
         class_counts.columns = ['Flood Severity', 'Occurrences']
         st.table(class_counts)
 
-        # ---------------- MODEL TRAINING ----------------
         try:
-            Xtr_s, Xte_s, ytr_s, yte_s = train_test_split(
-                Xsev, ysev, test_size=0.3, random_state=42, stratify=ysev
-            )
-
+            Xtr_s, Xte_s, ytr_s, yte_s = train_test_split(Xsev, ysev, test_size=0.3, random_state=42, stratify=ysev)
             model_sev = RandomForestClassifier(random_state=42)
             model_sev.fit(Xtr_s, ytr_s)
             ypred_s = model_sev.predict(Xte_s)
             acc_s = accuracy_score(yte_s, ypred_s)
 
-            # ---------------- RESULTS TABLES ----------------
             st.subheader("✅ Severity Model Results")
-
-            # Accuracy table
-            acc_table = pd.DataFrame({
-                'Metric': ['Accuracy (test)'],
-                'Value': [f"{acc_s:.4f}"]
-            })
+            acc_table = pd.DataFrame({'Metric': ['Accuracy (test)'], 'Value': [f"{acc_s:.4f}"]})
             st.table(acc_table)
 
-            # Classification report (tabular)
             report = classification_report(yte_s, ypred_s, output_dict=True, zero_division=0)
             report_df = pd.DataFrame(report).transpose().round(3)
-
             st.markdown("### 📈 Classification Report (Low / Medium / High)")
             st.table(report_df)
 
-            # ---------------- EXPLANATION ----------------
             if show_explanations:
                 st.markdown("""
-                **🧠 Explanation:**  
-                This multi-class RandomForest predicts flood severity levels — **Low**, **Medium**, or **High**.  
-                Class imbalance (e.g., fewer 'High' floods) can reduce recall for rare classes.  
-                For production use, consider resampling (SMOTE) or class-weight adjustments.
+                **🧠 Explanation:** This multi-class RandomForest predicts flood severity levels — Low, Medium, or High.
+                For production, consider SMOTE or class-weight adjustments to improve rare-class recall.
                 """)
 
         except Exception as e:
@@ -674,12 +689,11 @@ with tabs[5]:
     if 'df' not in locals():
         st.warning("Do data cleaning first.")
     else:
-        st.markdown("This section resamples Water Level to daily average, checks stationarity, fits an example SARIMA, and shows forecasts.")
+        st.markdown("This section resamples Water Level to daily average, checks stationarity, fits SARIMA, and shows forecasts.")
 
-        # create datetime index if possible
         df_temp = create_datetime_index(df)
         if not isinstance(df_temp.index, pd.DatetimeIndex):
-            st.error("Your dataset doesn't have usable Year/Month/Day date parts to form a time index. Add Year/Month/Day columns for time series forecasting.")
+            st.error("Dataset lacks usable Year/Month/Day to form a Date index. Add Year/Month/Day columns for forecasting.")
         else:
             ts = df_temp['Water Level'].resample('D').mean()
             ts_filled = ts.fillna(method='ffill').fillna(method='bfill')
@@ -689,9 +703,8 @@ with tabs[5]:
             st.plotly_chart(fig, use_container_width=True)
 
             if show_explanations:
-                st.markdown("**Explanation:** The data is resampled to daily averages, filling missing gaps to make it continuous for SARIMA modeling.")
+                st.markdown("**Explanation:** Resampled to daily averages and filled gaps for continuity before SARIMA.")
 
-            # ADF test
             st.subheader("Stationarity test (ADF)")
             try:
                 adf_result = adfuller(ts_filled.dropna())
@@ -709,7 +722,6 @@ with tabs[5]:
                 fig = px.line(ts_diff, title="First-order differenced series")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # ACF/PACF
             st.subheader("ACF & PACF (help pick p/q values)")
             try:
                 fig_acf = plt.figure(figsize=(10,4))
@@ -722,7 +734,6 @@ with tabs[5]:
             except Exception as e:
                 st.error(f"Plot failed: {e}")
 
-            # Fit SARIMA
             st.subheader("Fit example SARIMA model")
             with st.spinner("Fitting SARIMA (may take a moment)..."):
                 try:
@@ -736,17 +747,14 @@ with tabs[5]:
                         enforce_invertibility=False
                     )
                     results = model_sarima.fit(disp=False)
-
                     summary_table = results.summary().tables[1]
                     import io
                     summary_df = pd.read_csv(io.StringIO(summary_table.as_csv()))
                     st.dataframe(summary_df, use_container_width=True)
-
                 except Exception as e:
                     st.error(f"SARIMA fit failed: {e}")
                     results = None
 
-            # Forecast
             steps = st.slider("Forecast horizon (days)", 7, 365, 30)
             try:
                 if results is not None:
@@ -766,99 +774,68 @@ with tabs[5]:
             except Exception as e:
                 st.error(f"Forecast failed: {e}")
 
-
 # ------------------------------
-# Model Comparison Tab (Visual Format)
+# Model Comparison Tab
 # ------------------------------
 with tabs[6]:
     st.title("📊 Model Comparison Summary")
-
     st.markdown("""
-    This section visually compares the three machine learning models used in the flood pattern study.
-    Each column highlights the model’s goal, metric, and main findings — making it easier to spot their differences.
+    This section visually compares the three models used in the flood study.
     """)
-
-    # --- Comparison Table (same as before) ---
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
             "Identify flood pattern clusters",
-            "Predict flood severity or risk level",
+            "Predict flood occurrence / risk",
             "Forecast future water levels"
         ],
         "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
         "Result": ["3 Clusters", "92%", "0.23"],
         "Notes": [
             "Groups areas with similar water behavior",
-            "High accuracy for classification tasks",
-            "Low RMSE indicates reliable forecasts"
+            "Accuracy on test split (example)",
+            "Forecasting error (example)"
         ]
     }
 
     df_comparison = pd.DataFrame(comparison_data)
     st.table(df_comparison)
 
-    st.info("💡 Each model focuses on a different aspect: clustering, prediction, or forecasting — all working together for flood analysis.")
+    st.info("💡 Models focus on clustering, prediction, and forecasting — combine them for a fuller preparedness approach.")
 
-    # ------------------------------
-    # Visual Comparison (Side-by-side)
-    # ------------------------------
     st.subheader("Visual Comparison of Each Model")
-
     col1, col2, col3 = st.columns(3)
-
-    # --- K-Means Card ---
     with col1:
         st.markdown("""
-        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
             <h3>🌀 K-Means Clustering</h3>
             <p><b>Purpose:</b> Identify flood pattern clusters</p>
-            <p><b>Metric:</b> No. of Clusters</p>
-            <p><b>Result:</b> <span style='font-size:20px;color:#1565C0;'>3 Clusters</span></p>
-            <hr style='border:0.5px solid #90CAF9;'>
-            <p><b>Insight:</b><br>Groups similar flood behavior patterns to classify areas into low, medium, and high flood risks.</p>
+            <p><b>Result:</b> 3 Clusters (example)</p>
         </div>
         """, unsafe_allow_html=True)
-
-    # --- Random Forest Card ---
     with col2:
         st.markdown("""
-        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
             <h3>🌳 Random Forest</h3>
-            <p><b>Purpose:</b> Predict flood severity or risk level</p>
-            <p><b>Metric:</b> Accuracy</p>
-            <p><b>Result:</b> <span style='font-size:20px;color:#2E7D32;'>92%</span></p>
-            <hr style='border:0.5px solid #A5D6A7;'>
-            <p><b>Insight:</b><br>Achieved high accuracy in predicting flood severity using environmental and historical data.</p>
+            <p><b>Purpose:</b> Predict flood occurrence</p>
+            <p><b>Result:</b> 92% (example)</p>
         </div>
         """, unsafe_allow_html=True)
-
-    # --- SARIMA Card ---
     with col3:
         st.markdown("""
-        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);'>
+        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
             <h3>📈 SARIMA</h3>
-            <p><b>Purpose:</b> Forecast future water levels</p>
-            <p><b>Metric:</b> RMSE</p>
-            <p><b>Result:</b> <span style='font-size:20px;color:#6A1B9A;'>0.23</span></p>
-            <hr style='border:0.5px solid #CE93D8;'>
-            <p><b>Insight:</b><br>Accurate short-term water level forecasting model with minimal error — ideal for disaster preparedness.</p>
+            <p><b>Purpose:</b> Forecast water levels</p>
+            <p><b>Result:</b> RMSE 0.23 (example)</p>
         </div>
         """, unsafe_allow_html=True)
-
-    # ------------------------------
-    # Visual Graph Comparison
-    # ------------------------------
-    st.subheader("Performance Visualization")
 
     perf_data = pd.DataFrame({
         "Model": ["K-Means", "Random Forest", "SARIMA"],
         "Performance": [3, 92, 0.23],
         "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
     })
-
     perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
-
     fig = px.bar(
         perf_data,
         x="Model",
@@ -866,40 +843,10 @@ with tabs[6]:
         color="Model",
         text="Performance",
         title="📊 Model Performance Comparison",
-        hover_data=["Metric"],
-        color_discrete_sequence=px.colors.qualitative.Bold
     )
-
     fig.update_traces(texttemplate='%{text}', textposition='outside')
-    fig.update_layout(
-        yaxis_title="Scaled Performance (Normalized %)",
-        xaxis_title="Model",
-        showlegend=False
-    )
-
+    fig.update_layout(yaxis_title="Scaled Performance (Normalized %)", xaxis_title="Model", showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.caption("Note: Metrics are normalized for visualization only — K-Means uses cluster count, Random Forest uses accuracy, and SARIMA uses RMSE (lower is better).")
-
 st.sidebar.markdown("---")
-st.sidebar.markdown("App converted from Colab -> Streamlit. If you want, I can:")
-st.sidebar.markdown("- Add model persistence (save/load trained models)\n- Add resampling for imbalance (SMOTE/oversample)\n- Add downloadable reports (PDF/Excel)\n\nIf you want any of those, say the word and I'll add it.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
