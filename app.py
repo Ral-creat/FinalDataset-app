@@ -313,34 +313,25 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-# --- Water Level distribution (Plotly) ---
-if 'Water Level' in df.columns:
-    st.subheader("Water Level Distribution")
-
-    fig = px.histogram(
-        df,
-        x='Water Level',
-        nbins=30,
-        marginal="box",
-        title="Distribution of Cleaned Water Level"
-    )
-
-    # Set axes: x (meters 0–25), y (frequency 0–10)
-    fig.update_xaxes(title_text="Water Level (meters)", range=[0, 25])
-    fig.update_yaxes(title_text="Frequency", range=[0, 10])
-
-    # Display chart
-    st.plotly_chart(fig, use_container_width=True)
-
-    if show_explanations:
-        st.markdown("""
-        **Explanation:**  
-        This histogram shows the distribution of `Water Level` after cleaning and filling missing values with the median.  
-        The **x-axis (Water Level)** ranges from **0–25 meters**, while the **y-axis (Frequency)** is fixed between **0–10**  
-        to keep the chart visually consistent across different datasets.  
-        The boxplot above helps reveal any outliers or unusual flood readings.
-        """)
-
+ # Water Level distribution (Plotly)
+        if 'Water Level' in df.columns:
+            st.subheader("Water Level distribution")
+            fig = px.histogram(
+                df,
+                x='Water Level',
+                nbins=30,
+                marginal="box",
+                title="Distribution of Cleaned Water Level"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
+                and filling missing values with the median.  
+                The boxplot margin highlights potential outliers.  
+                Use this to detect skew and extreme flood events.
+                """)
 
         # Monthly flood probability with equal-sample option
         if 'Month' in df.columns:
@@ -851,6 +842,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
