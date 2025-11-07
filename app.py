@@ -325,9 +325,9 @@ if 'Water Level' in df.columns:
         title="Distribution of Cleaned Water Level"
     )
 
-    # Set axis labels and scale
-    fig.update_xaxes(title_text="Water Level (meters)", range=[0, 10])
-    fig.update_yaxes(title_text="Frequency", range=[0, df['Water Level'].value_counts().max() + 5])
+    # Set axes: x (meters 0–25), y (frequency 0–10)
+    fig.update_xaxes(title_text="Water Level (meters)", range=[0, 25])
+    fig.update_yaxes(title_text="Frequency", range=[0, 10])
 
     # Display chart
     st.plotly_chart(fig, use_container_width=True)
@@ -335,10 +335,10 @@ if 'Water Level' in df.columns:
     if show_explanations:
         st.markdown("""
         **Explanation:**  
-        This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-        and filling missing values with the median.  
-        The x-axis scale is fixed between **0–10**, while the y-axis shows the **frequency** of readings.  
-        The boxplot above helps detect outliers and extreme flood events.
+        This histogram shows the distribution of `Water Level` after cleaning and filling missing values with the median.  
+        The **x-axis (Water Level)** ranges from **0–25 meters**, while the **y-axis (Frequency)** is fixed between **0–10**  
+        to keep the chart visually consistent across different datasets.  
+        The boxplot above helps reveal any outliers or unusual flood readings.
         """)
 
 
@@ -851,6 +851,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
