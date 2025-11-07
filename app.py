@@ -313,54 +313,25 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-       # Water Level distribution (Plotly) with equal-frequency option
-if 'Water Level' in df.columns:
-    st.subheader("Water Level Distribution")
-    use_equalfreq = st.checkbox("Use equal-frequency bins (quantile bins) for Water Level", value=False)
-
-    if use_equalfreq:
-        n_bins = st.slider("Equal-frequency bins (k)", 3, 20, int(default_equalfreq_bins))
-        wl = df['Water Level'].dropna()
-        if wl.empty:
-            st.warning("No numeric Water Level values available for equal-frequency binning.")
-        else:
-            try:
-                df['WL_bin_eqfreq'] = pd.qcut(wl, q=n_bins, duplicates='drop')
-                bin_counts = df.groupby('WL_bin_eqfreq').size().reset_index(name='count')
-                bin_counts['bin_str'] = bin_counts['WL_bin_eqfreq'].astype(str)
-                fig = px.bar(
-                    bin_counts,
-                    x='bin_str',
-                    y='count',
-                    title=f"Water Level (equal-frequency, {len(bin_counts)} bins)"
-                )
-                fig.update_layout(
-                    xaxis_tickangle=45,
-                    xaxis_title="Water Level bin (equal-frequency)",
-                    yaxis_title="Count"
-                )
-                fig.update_yaxes(range=[0, 8])  # 🔥 lock y-axis scale
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Could not create equal-frequency bins: {e}")
-
-    else:
-        fig = px.histogram(
-            df,
-            x='Water Level',
-            nbins=30,
-            marginal="box",
-            title="Distribution of Cleaned Water Level"
-        )
-        fig.update_yaxes(range=[0, 8])  # 🔥 lock y-axis scale here too
-        st.plotly_chart(fig, use_container_width=True)
-
-    if show_explanations:
-        st.markdown("""
-        **Note:** Equal-frequency (quantile) bins give roughly the same number of records per bin — good for comparing ranges with uniform counts.
-        """)
-
-
+ # Water Level distribution (Plotly)
+        if 'Water Level' in df.columns:
+            st.subheader("Water Level distribution")
+            fig = px.histogram(
+                df,
+                x='Water Level',
+                nbins=30,
+                marginal="box",
+                title="Distribution of Cleaned Water Level"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
+                and filling missing values with the median.  
+                The boxplot margin highlights potential outliers.  
+                Use this to detect skew and extreme flood events.
+                """)
         # Monthly flood probability with equal-sample option
         if 'Month' in df.columns:
             st.subheader("Monthly Flood Probability")
@@ -870,4 +841,5 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
