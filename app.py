@@ -323,7 +323,6 @@ with tabs[1]:
                 marginal="box",
                 title="Distribution of Cleaned Water Level"
             )
-             fig.update_yaxes(range=[0, 2])  # 👈 limits count from 0 to 2 only
             st.plotly_chart(fig, use_container_width=True)
             if show_explanations:
                 st.markdown("""
@@ -843,6 +842,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
