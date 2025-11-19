@@ -313,17 +313,25 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-if 'df' in locals() and 'Water Level' in df.columns:
-    st.subheader("Water Level distribution (Counts scaled 0–1)")
-    fig = px.histogram(
-        df,
-        x='Water Level',
-        nbins=30,
-        marginal="box",
-        histnorm='probability',  # scales counts 0-1
-        title="Distribution of Water Level (Counts scaled 0–1)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+ # Water Level distribution (Plotly)
+        if 'Water Level' in df.columns:
+            st.subheader("Water Level distribution")
+            fig = px.histogram(
+                df,
+                x='Water Level',
+                nbins=30,
+                marginal="box",
+                title="Distribution of Cleaned Water Level"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            if show_explanations:
+                st.markdown("""
+                **Explanation:**  
+                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
+                and filling missing values with the median.  
+                The boxplot margin highlights potential outliers.  
+                Use this to detect skew and extreme flood events.
+                """)
 
         # Monthly flood probability with equal-sample option
         if 'Month' in df.columns:
@@ -423,6 +431,7 @@ if 'df' in locals() and 'Water Level' in df.columns:
             fig = px.bar(brgy, x='Barangay', y='probability', title="Flood Probability by Barangay", text='probability')
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
+
 
 # ------------------------------
 # Clustering Tab (KMeans)
@@ -812,6 +821,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
