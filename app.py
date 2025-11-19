@@ -577,28 +577,6 @@ with tabs[3]:
         except Exception:
             st.info("Monthly probabilities can't be computed (missing Month).")
 
-        # --- Predicted Flood Probabilities (Model-Based) ---
-        if st.button("🔮 Show Predicted Flood Probability per Month (using median inputs)"):
-            try:
-                median_vals = X_basic.median()
-                months = sorted(df['Month'].dropna().unique())
-                pred_rows = []
-                for m in months:
-                    row = median_vals.copy()
-                    md = [c for c in X_basic.columns if c.startswith('Month_')]
-                    for col in md:
-                        row[col] = 1 if col == f"Month_{m}" else 0
-                    pred_rows.append(row.values)
-                Xpred = pd.DataFrame(pred_rows, columns=X_basic.columns)
-                probs = model.predict_proba(Xpred)[:, 1]
-                prob_df = pd.DataFrame({'Month': months, 'Predicted Probability': probs}).sort_values('Predicted Probability', ascending=False)
-                fig = px.bar(prob_df, x='Month', y='Predicted Probability',
-                             title="Predicted Flood Probability per Month (median inputs)",
-                             color='Predicted Probability', color_continuous_scale='Blues')
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Prediction failed: {e}")
-
 # ------------------------------
 # Flood Severity Tab
 # ------------------------------
@@ -842,6 +820,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
