@@ -1495,78 +1495,77 @@ with tabs[5]:
 # ------------------------------
 with tabs[6]:
     st.title("📊 Model Comparison Summary")
-    st.markdown("This section compares the results of the three models used in the flood study.")
-
-    st.subheader("🔹 Model Results Overview")
-
-    # --------------------------------------------------
-    # SAMPLE MODEL OUTPUTS – Replace with your variables
-    # --------------------------------------------------
-    kmeans_clusters = 3
-    kmeans_plot = True  # set this if you already generated a chart
-
-    rf_accuracy = 0.92
-    rf_feature_importance = True  # set this if you have a feature importance plot
-
-    sarima_rmse = 0.23
-    sarima_forecast_plot = True   # set this if you have a forecast plot
-
-    # Summary Table
+    st.markdown("""
+    This section visually compares the three models used in the flood study.
+    """)
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
-        "Primary Output": [
-            f"{kmeans_clusters} Clusters",
-            f"{rf_accuracy*100:.1f}% Accuracy",
-            f"RMSE: {sarima_rmse}"
+        "Purpose": [
+            "Identify flood pattern clusters",
+            "Predict flood occurrence / risk",
+            "Forecast future water levels"
         ],
-        "Use Case": [
-            "Grouping similar flood patterns",
-            "Predicting flood occurrence",
-            "Forecasting future water levels"
+        "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
+        "Result": ["3 Clusters", "92%", "0.23"],
+        "Notes": [
+            "Groups areas with similar water behavior",
+            "Accuracy on test split (example)",
+            "Forecasting error (example)"
         ]
     }
 
-    st.table(comparison_data)
+    df_comparison = pd.DataFrame(comparison_data)
+    st.table(df_comparison)
 
-    st.markdown("---")
-    st.subheader("🔸 Visual Comparison")
+    st.info("💡 Models focus on clustering, prediction, and forecasting — combine them for a fuller preparedness approach.")
 
-    # -----------------------
-    # KMEANS VISUAL
-    # -----------------------
-    st.markdown("### 🟦 K-Means Clustering Result")
-    if kmeans_plot:
-        st.pyplot(fig_kmeans)  # your KMeans scatter plot here
-    else:
-        st.info("Upload or generate a K-Means plot to display it here.")
+    st.subheader("Visual Comparison of Each Model")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""
+        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
+            <h3>🌀 K-Means Clustering</h3>
+            <p><b>Purpose:</b> Identify flood pattern clusters</p>
+            <p><b>Result:</b> 3 Clusters (example)</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
+            <h3>🌳 Random Forest</h3>
+            <p><b>Purpose:</b> Predict flood occurrence</p>
+            <p><b>Result:</b> 92% (example)</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown("""
+        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
+            <h3>📈 SARIMA</h3>
+            <p><b>Purpose:</b> Forecast water levels</p>
+            <p><b>Result:</b> RMSE 0.23 (example)</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    # -----------------------
-    # RANDOM FOREST VISUAL
-    # -----------------------
-    st.markdown("### 🟩 Random Forest Result")
-    st.write(f"**Model Accuracy:** {rf_accuracy*100:.2f}%")
-    if rf_feature_importance:
-        st.pyplot(fig_rf_importance)
-    else:
-        st.info("Feature importance chart not available.")
-
-    st.markdown("---")
-
-    # -----------------------
-    # SARIMA VISUAL
-    # -----------------------
-    st.markdown("### 🟧 SARIMA Forecast Result")
-    st.write(f"**SARIMA RMSE:** {sarima_rmse}")
-
-    if sarima_forecast_plot:
-        st.pyplot(fig_sarima_forecast)
-    else:
-        st.info("Generate a SARIMA forecast plot to show results here.")
+    perf_data = pd.DataFrame({
+        "Model": ["K-Means", "Random Forest", "SARIMA"],
+        "Performance": [3, 92, 0.23],
+        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
+    })
+    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+    fig = px.bar(
+        perf_data,
+        x="Model",
+        y="Scaled Performance",
+        color="Model",
+        text="Performance",
+        title="📊 Model Performance Comparison",
+    )
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+    fig.update_layout(yaxis_title="Scaled Performance (Normalized %)", xaxis_title="Model", showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Just tell me.")
+st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
 
 
 
