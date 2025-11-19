@@ -313,25 +313,18 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
- # Water Level distribution (Plotly)
-        if 'Water Level' in df.columns:
-            st.subheader("Water Level distribution")
-            fig = px.histogram(
-                df,
-                x='Water Level',
-                nbins=30,
-                marginal="box",
-                title="Distribution of Cleaned Water Level"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            if show_explanations:
-                st.markdown("""
-                **Explanation:**  
-                This histogram shows the distribution of `Water Level` after cleaning non-numeric characters
-                and filling missing values with the median.  
-                The boxplot margin highlights potential outliers.  
-                Use this to detect skew and extreme flood events.
-                """)
+# Water Level distribution (Plotly)
+if 'Water Level' in df.columns:
+    st.subheader("Water Level distribution")
+    fig = px.histogram(
+        df,
+        x='Water Level',
+        nbins=30,
+        marginal="box",
+        title="Distribution of Cleaned Water Level"
+    )
+    fig.update_xaxes(range=[0, 10])  # 👈 force 0–10 only
+    st.plotly_chart(fig, use_container_width=True)
 
         # Monthly flood probability with equal-sample option
         if 'Month' in df.columns:
@@ -842,6 +835,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
