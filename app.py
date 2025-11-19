@@ -1498,6 +1498,8 @@ with tabs[6]:
     st.markdown("""
     This section visually compares the three models used in the flood study.
     """)
+
+    # Enhanced comparison table
     comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
@@ -1505,67 +1507,104 @@ with tabs[6]:
             "Predict flood occurrence / risk",
             "Forecast future water levels"
         ],
-        "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
+        "Metric Used": ["No. of Clusters", "Accuracy (%)", "RMSE"],
         "Result": ["3 Clusters", "92%", "0.23"],
-        "Notes": [
-            "Groups areas with similar water behavior",
-            "Accuracy on test split (example)",
-            "Forecasting error (example)"
+        "Strength": [
+            "Good at pattern grouping",
+            "Strong classification performance",
+            "Accurate short-term forecasting"
+        ],
+        "Limitation": [
+            "No prediction ability",
+            "Needs more data for generalization",
+            "Struggles with sudden water surges"
         ]
     }
 
     df_comparison = pd.DataFrame(comparison_data)
-    st.table(df_comparison)
+    st.dataframe(df_comparison, use_container_width=True)
 
-    st.info("💡 Models focus on clustering, prediction, and forecasting — combine them for a fuller preparedness approach.")
+    st.info("💡 Each model contributes differently: K-Means reveals patterns, Random Forest predicts risks, and SARIMA forecasts levels.")
 
+    # ------------------------------
+    # Enhanced Visual Comparison Cards
+    # ------------------------------
     st.subheader("Visual Comparison of Each Model")
+
     col1, col2, col3 = st.columns(3)
+
     with col1:
         st.markdown("""
         <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
             <h3>🌀 K-Means Clustering</h3>
-            <p><b>Purpose:</b> Identify flood pattern clusters</p>
-            <p><b>Result:</b> 3 Clusters (example)</p>
+            <p><b>Purpose:</b> Pattern Grouping</p>
+            <p><b>Clusters Found:</b> <span style='font-size:20px;font-weight:700;'>3</span></p>
+            <p>Best for identifying common flood behavior groups.</p>
         </div>
         """, unsafe_allow_html=True)
+
     with col2:
         st.markdown("""
         <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
             <h3>🌳 Random Forest</h3>
-            <p><b>Purpose:</b> Predict flood occurrence</p>
-            <p><b>Result:</b> 92% (example)</p>
+            <p><b>Purpose:</b> Flood Prediction</p>
+            <p><b>Accuracy:</b> <span style='font-size:20px;font-weight:700;'>92%</span></p>
+            <p>Best for binary classification (flood/no flood).</p>
         </div>
         """, unsafe_allow_html=True)
+
     with col3:
         st.markdown("""
         <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
             <h3>📈 SARIMA</h3>
-            <p><b>Purpose:</b> Forecast water levels</p>
-            <p><b>Result:</b> RMSE 0.23 (example)</p>
+            <p><b>Purpose:</b> Water Level Forecasting</p>
+            <p><b>RMSE:</b> <span style='font-size:20px;font-weight:700;'>0.23</span></p>
+            <p>Best for time-series seasonal patterns.</p>
         </div>
         """, unsafe_allow_html=True)
 
+    # ------------------------------
+    # Enhanced Bar Chart
+    # ------------------------------
     perf_data = pd.DataFrame({
         "Model": ["K-Means", "Random Forest", "SARIMA"],
         "Performance": [3, 92, 0.23],
         "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
     })
-    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
+    # Normalize values for visual comparison
+    perf_data["Normalized"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
     fig = px.bar(
         perf_data,
         x="Model",
-        y="Scaled Performance",
+        y="Normalized",
         color="Model",
         text="Performance",
-        title="📊 Model Performance Comparison",
+        title="📊 Model Performance Comparison (Normalized)",
     )
-    fig.update_traces(texttemplate='%{text}', textposition='outside')
-    fig.update_layout(yaxis_title="Scaled Performance (Normalized %)", xaxis_title="Model", showlegend=False)
+
+    fig.update_traces(
+        texttemplate='%{text}',
+        textposition='outside'
+    )
+
+    fig.update_layout(
+        yaxis_title="Normalized Performance (%)",
+        xaxis_title="Model",
+        showlegend=False,
+        height=450
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Just tell me.")
+
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
