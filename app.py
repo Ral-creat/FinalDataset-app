@@ -313,30 +313,24 @@ with tabs[1]:
         st.subheader("Summary statistics (numerical):")
         st.write(df.select_dtypes(include=[np.number]).describe())
 
-# Water Level distribution (Plotly)
+# Water Level distribution (counts scaled 0–1)
 if 'Water Level' in df.columns:
-    st.subheader("Water Level distribution (Scaled 0–1)")
-
-    # Scale Water Level 0–1
-    df['Water Level Scaled'] = (
-        (df['Water Level'] - df['Water Level'].min()) /
-        (df['Water Level'].max() - df['Water Level'].min())
-    )
+    st.subheader("Water Level distribution (Counts scaled 0–1)")
 
     fig = px.histogram(
         df,
-        x='Water Level Scaled',
+        x='Water Level',
         nbins=30,
         marginal="box",
-        title="Distribution of Water Level (Scaled 0–1)"
+        histnorm='probability',  # <-- scales counts to 0-1
+        title="Distribution of Water Level (Counts scaled 0–1)"
     )
     st.plotly_chart(fig, use_container_width=True)
 
     if show_explanations:
         st.markdown("""
         **Explanation:**  
-        The Water Level values are normalized between **0 (lowest)** and **1 (highest)**.  
-        This helps compare distributions regardless of the original scale.
+        The histogram counts are normalized between **0 and 1**, showing relative frequency instead of raw counts.
         """)
 
         # Monthly flood probability with equal-sample option
@@ -826,6 +820,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
