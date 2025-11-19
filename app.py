@@ -323,7 +323,8 @@ with tabs[1]:
                 marginal="box",
                 title="Distribution of Cleaned Water Level"
             )
-            st.plotly_chart(fig, use_container_width=True)
+           # 👉 Set Y-axis from 0% to 100%
+fig.update_yaxes(range=[0, 1])
             if show_explanations:
                 st.markdown("""
                 **Explanation:**  
@@ -821,6 +822,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
