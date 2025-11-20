@@ -244,7 +244,7 @@ tabs = st.tabs(["Data Upload", "Data Cleaning & EDA", "Clustering (KMeans)", "Fl
 # Data Upload Tab
 # ------------------------------
 with tabs[0]:
-    st.markdown("<h2 class='main-title'>📂 Data Upload & Overview</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='main-title'>📂 Data Upload & Overview 📂</h2>", unsafe_allow_html=True)
 
     if uploaded_file is None and not use_example:
         st.info("📤 Please upload a CSV/Excel to begin, or toggle **'Use example dataset'**.")
@@ -274,20 +274,20 @@ with tabs[0]:
                 'Damage Infrastructure': ['0', '0', '1,000', '5,000', '0', '0'],
                 'Damage Agriculture': ['0', '0', '422.510.5', '10,000', '0', '0']
             })
-            st.markdown("### 🧾 Example Data Preview")
+            st.markdown("### 🧾 Example Data Preview 🧾")
             st.dataframe(df_raw.head(), use_container_width=True)
 
-        st.markdown("### 📊 Dataset Overview")
+        st.markdown("### 📊 Dataset Overview 📊")
         info_col1, info_col2 = st.columns(2)
         with info_col1:
             st.metric("📅 Total Rows", f"{df_raw.shape[0]:,}")
         with info_col2:
-            st.metric("📈 Total Columns", f"{df_raw.shape[1]}")
+            st.metric("📈 Total Columns 📈", f"{df_raw.shape[1]}")
 
-        with st.expander("🔍 View Raw Data (First 50 Rows)"):
+        with st.expander("🔍 View Raw Data 🔍 (First 50 Rows)"):
             st.dataframe(df_raw.head(50), use_container_width=True)
 
-        st.markdown("### 🧩 Column Names")
+        st.markdown("### 🧩 Column Names 🧩")
         col_df = pd.DataFrame({
             "Column Name": df_raw.columns,
             "Example Value": [str(df_raw[col].iloc[0]) if not df_raw[col].empty else "" for col in df_raw.columns]
@@ -493,10 +493,10 @@ with tabs[2]:
 # Flood Prediction (RandomForest) Tab
 # ------------------------------
 with tabs[3]:
-    st.header("🌊 Flood Occurrence Prediction — RandomForest")
+    st.header("🌊 Flood Occurrence Prediction — RandomForest 🌊")
 
     if 'df' not in locals():
-        st.warning("⚠️ Please run data cleaning first.")
+        st.warning("⚠️ Please run data cleaning first. ⚠️")
     else:
         st.markdown("We train a **RandomForest** model to predict `flood_occurred`. Toggle balancing for training data below.")
 
@@ -546,12 +546,12 @@ with tabs[3]:
             ypred = np.zeros_like(yte)
 
         # Accuracy + report
-        st.subheader("📊 RandomForest Evaluation")
+        st.subheader("📊 RandomForest Evaluation 📊")
         st.table(pd.DataFrame({"Metric": ["Accuracy (test)"], "Value": [f"{acc:.4f}"]}))
 
         try:
             report = classification_report(yte, ypred, output_dict=True, zero_division=0)
-            st.markdown("### 📈 Classification Report")
+            st.markdown("### 📈 Classification Report 📈")
             st.table(pd.DataFrame(report).transpose().round(3))
         except Exception:
             st.info("No classification report available.")
@@ -562,13 +562,13 @@ with tabs[3]:
         # Feature importances
         try:
             fi = pd.Series(model.feature_importances_, index=X_basic.columns).sort_values(ascending=False).head(10)
-            st.subheader("🔥 Top Feature Importances")
+            st.subheader("🔥 Top Feature Importances 🔥")
             st.bar_chart(fi)
         except Exception:
             pass
 
         # --- Monthly Flood Probability (Raw Data) ---
-        st.subheader("📅 Monthly Flood Probabilities (actual data)")
+        st.subheader("📅 Monthly Flood Probabilities  📅")
         try:
             monthly_flood_counts = df.groupby('Month')['flood_occurred'].sum()
             monthly_total_counts = df.groupby('Month')['flood_occurred'].count()
@@ -582,14 +582,14 @@ with tabs[3]:
 # Flood Severity Tab
 # ------------------------------
 with tabs[4]:
-    st.header("🌊 Flood Severity Classification")
+    st.header("🌊 Flood Severity Classification 🌊")
 
     if 'df' not in locals():
-        st.warning("⚠️ Please perform data cleaning first.")
+        st.warning("⚠️ Please perform data cleaning first. ⚠️")
     else:
         df['Flood_Severity'] = df['Water Level'].apply(categorize_severity)
 
-        st.subheader("📊 Severity Distribution")
+        st.subheader("📊 Severity Distribution 📊")
         sev_counts = df['Flood_Severity'].value_counts().reset_index()
         sev_counts.columns = ['Severity Level', 'Count']
         st.table(sev_counts)
@@ -634,13 +634,13 @@ with tabs[4]:
             ypred_s = model_sev.predict(Xte_s)
             acc_s = accuracy_score(yte_s, ypred_s)
 
-            st.subheader("✅ Severity Model Results")
+            st.subheader("✅ Severity Model Results ✅")
             acc_table = pd.DataFrame({'Metric': ['Accuracy (test)'], 'Value': [f"{acc_s:.4f}"]})
             st.table(acc_table)
 
             report = classification_report(yte_s, ypred_s, output_dict=True, zero_division=0)
             report_df = pd.DataFrame(report).transpose().round(3)
-            st.markdown("### 📈 Classification Report (Low / Medium / High)")
+            st.markdown("### 📈 Classification Report (Low / Medium / High) 📈")
             st.table(report_df)
 
             if show_explanations:
@@ -749,7 +749,7 @@ with tabs[5]:
 # Model Comparison Tab
 # ------------------------------
 with tabs[6]:
-    st.title("📊 Model Comparison Summary")
+    st.title("📊 Model Comparison Summary 📊")
     st.markdown("""
     This section visually compares the three models used in the flood study.
     """)
@@ -779,7 +779,7 @@ with tabs[6]:
     with col1:
         st.markdown("""
         <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>🌀 K-Means Clustering</h3>
+            <h3>🌀 K-Means Clustering 🌀</h3>
             <p><b>Purpose:</b> Identify flood pattern clusters</p>
             <p><b>Result:</b> 3 Clusters (example)</p>
         </div>
@@ -787,7 +787,7 @@ with tabs[6]:
     with col2:
         st.markdown("""
         <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>🌳 Random Forest</h3>
+            <h3>🌳 Random Forest 🌳</h3>
             <p><b>Purpose:</b> Predict flood occurrence</p>
             <p><b>Result:</b> 92% (example)</p>
         </div>
@@ -795,7 +795,7 @@ with tabs[6]:
     with col3:
         st.markdown("""
         <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>📈 SARIMA</h3>
+            <h3>📈 SARIMA 📈</h3>
             <p><b>Purpose:</b> Forecast water levels</p>
             <p><b>Result:</b> RMSE 0.23 (example)</p>
         </div>
@@ -813,7 +813,7 @@ with tabs[6]:
         y="Scaled Performance",
         color="Model",
         text="Performance",
-        title="📊 Model Performance Comparison",
+        title="📊 Model Performance Comparison 📊",
     )
     fig.update_traces(texttemplate='%{text}', textposition='outside')
     fig.update_layout(yaxis_title="Scaled Performance (Normalized %)", xaxis_title="Model", showlegend=False)
@@ -821,6 +821,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
