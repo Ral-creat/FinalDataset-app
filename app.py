@@ -754,7 +754,8 @@ with tabs[6]:
         st.warning("Do data cleaning first.")
     else:
         st.markdown(" This section visually compares the three models used in the flood study.")
-    comparison_data = {
+  
+comparison_data = {
         "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
         "Purpose": [
             "Identify flood pattern clusters",
@@ -822,6 +823,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
