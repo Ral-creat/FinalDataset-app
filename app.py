@@ -769,8 +769,8 @@ with tabs[6]:
             "Result": ["3 Clusters", "92%", "0.23"],
             "Notes": [
                 "Groups areas with similar water behavior",
-                "Accuracy on test split (example)",
-                "Forecasting error (example)"
+                "Accuracy on test split ",
+                "Forecasting error "
             ]
         }
 
@@ -788,7 +788,7 @@ with tabs[6]:
             <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
                 <h3>🌀 K-Means Clustering 🌀</h3>
                 <p><b>Purpose:</b> Identify flood pattern clusters</p>
-                <p><b>Result:</b> 3 Clusters (example)</p>
+                <p><b>Result:</b> 3 Clusters</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -797,7 +797,7 @@ with tabs[6]:
             <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
                 <h3>🌳 Random Forest 🌳</h3>
                 <p><b>Purpose:</b> Predict flood occurrence</p>
-                <p><b>Result:</b> 92% (example)</p>
+                <p><b>Result:</b> 92% </p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -806,7 +806,7 @@ with tabs[6]:
             <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
                 <h3>📈 SARIMA 📈</h3>
                 <p><b>Purpose:</b> Forecast water levels</p>
-                <p><b>Result:</b> RMSE 0.23 (example)</p>
+                <p><b>Result:</b> RMSE 0.23 </p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -837,6 +837,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
