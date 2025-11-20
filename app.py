@@ -757,74 +757,87 @@ with tabs[6]:
     else:
         st.markdown("This section visually compares the three models used in the flood study.")
 
-comparison_data = {
-        "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
-        "Purpose": [
-            "Identify flood pattern clusters",
-            "Predict flood occurrence / risk",
-            "Forecast future water levels"
-        ],
-        "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
-        "Result": ["3 Clusters", "92%", "0.23"],
-        "Notes": [
-            "Groups areas with similar water behavior",
-            "Accuracy on test split (example)",
-            "Forecasting error (example)"
-        ]
-    }
+        # Comparison table
+        comparison_data = {
+            "Model": ["K-Means Clustering", "Random Forest", "SARIMA"],
+            "Purpose": [
+                "Identify flood pattern clusters",
+                "Predict flood occurrence / risk",
+                "Forecast future water levels"
+            ],
+            "Metric": ["No. of Clusters", "Accuracy", "RMSE"],
+            "Result": ["3 Clusters", "92%", "0.23"],
+            "Notes": [
+                "Groups areas with similar water behavior",
+                "Accuracy on test split (example)",
+                "Forecasting error (example)"
+            ]
+        }
 
-    df_comparison = pd.DataFrame(comparison_data)
-    st.table(df_comparison)
+        df_comparison = pd.DataFrame(comparison_data)
+        st.table(df_comparison)
 
-    st.info("💡 Models focus on clustering, prediction, and forecasting — combine them for a fuller preparedness approach.")
+        st.info("💡 Models focus on clustering, prediction, and forecasting — combine them for a fuller preparedness approach.")
 
-    st.subheader("Visual Comparison of Each Model")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""
-        <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>🌀 K-Means Clustering 🌀</h3>
-            <p><b>Purpose:</b> Identify flood pattern clusters</p>
-            <p><b>Result:</b> 3 Clusters (example)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-        <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>🌳 Random Forest 🌳</h3>
-            <p><b>Purpose:</b> Predict flood occurrence</p>
-            <p><b>Result:</b> 92% (example)</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown("""
-        <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
-            <h3>📈 SARIMA 📈</h3>
-            <p><b>Purpose:</b> Forecast water levels</p>
-            <p><b>Result:</b> RMSE 0.23 (example)</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Visual comparison cards
+        st.subheader("Visual Comparison of Each Model")
+        col1, col2, col3 = st.columns(3)
 
-    perf_data = pd.DataFrame({
-        "Model": ["K-Means", "Random Forest", "SARIMA"],
-        "Performance": [3, 92, 0.23],
-        "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
-    })
-    perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
-    fig = px.bar(
-        perf_data,
-        x="Model",
-        y="Scaled Performance",
-        color="Model",
-        text="Performance",
-        title="📊 Model Performance Comparison 📊",
-    )
-    fig.update_traces(texttemplate='%{text}', textposition='outside')
-    fig.update_layout(yaxis_title="Scaled Performance (Normalized %)", xaxis_title="Model", showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+        with col1:
+            st.markdown("""
+            <div style='background-color:#E3F2FD;padding:20px;border-radius:15px;text-align:center;'>
+                <h3>🌀 K-Means Clustering 🌀</h3>
+                <p><b>Purpose:</b> Identify flood pattern clusters</p>
+                <p><b>Result:</b> 3 Clusters (example)</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("""
+            <div style='background-color:#E8F5E9;padding:20px;border-radius:15px;text-align:center;'>
+                <h3>🌳 Random Forest 🌳</h3>
+                <p><b>Purpose:</b> Predict flood occurrence</p>
+                <p><b>Result:</b> 92% (example)</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col3:
+            st.markdown("""
+            <div style='background-color:#F3E5F5;padding:20px;border-radius:15px;text-align:center;'>
+                <h3>📈 SARIMA 📈</h3>
+                <p><b>Purpose:</b> Forecast water levels</p>
+                <p><b>Result:</b> RMSE 0.23 (example)</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Bar chart performance comparison
+        perf_data = pd.DataFrame({
+            "Model": ["K-Means", "Random Forest", "SARIMA"],
+            "Performance": [3, 92, 0.23],
+            "Metric": ["No. of Clusters", "Accuracy (%)", "RMSE"]
+        })
+        perf_data["Scaled Performance"] = perf_data["Performance"] / perf_data["Performance"].max() * 100
+
+        fig = px.bar(
+            perf_data,
+            x="Model",
+            y="Scaled Performance",
+            color="Model",
+            text="Performance",
+            title="📊 Model Performance Comparison 📊",
+        )
+        fig.update_traces(texttemplate='%{text}', textposition='outside')
+        fig.update_layout(
+            yaxis_title="Scaled Performance (Normalized %)",
+            xaxis_title="Model",
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
