@@ -1,30 +1,8 @@
-/* 🌸 MAIN BACKGROUND (soft pink gradient with moving wave effect) */
+/* 🌸 MAIN BACKGROUND (soft pink gradient) */
 .main, [data-testid="stAppViewContainer"] {
-    position: relative;
-    overflow: hidden;
+    background: linear-gradient(180deg, #ffe6f0 0%, #ffd6e8 100%);
     color: #333;
     font-family: "Poppins", sans-serif;
-}
-
-/* 🌊 Animated pseudo-element for wave motion */
-.main::before, [data-testid="stAppViewContainer"]::before {
-    content: "";
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: linear-gradient(180deg, #ffe6f0 0%, #ffd6e8 100%);
-    z-index: -1;
-    animation: waveMove 15s linear infinite;
-    transform: rotate(45deg);
-}
-
-/* 🌊 Keyframes for wave movement */
-@keyframes waveMove {
-    0% { transform: translate(0%, 0%) rotate(45deg); }
-    50% { transform: translate(25%, 25%) rotate(45deg); }
-    100% { transform: translate(0%, 0%) rotate(45deg); }
 }
 /* 🌸 NAVIGATION BAR BUTTONS (Data Upload, EDA, etc.) */
 [data-testid="stHorizontalBlock"] div button,
