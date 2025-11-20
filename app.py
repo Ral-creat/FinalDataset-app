@@ -221,7 +221,7 @@ def balance_by_column(df, col, n_samples=None, method='upsample', random_state=4
 # ------------------------------
 # UI Layout
 # ------------------------------
-st.title("🌊 BUNUWAN AGUSAN DEL SUR FLOOD PATTERN REPORT 🌊")
+st.title("🌊 BUNAWAN AGUSAN DEL SUR FLOOD REPORT 🌊")
 st.markdown("Upload a CSV/Excel (e.g. FloodDataMDRRMO.csv) — explore cleaning, EDA, clustering, prediction & forecasting. Toggle uniform/balancing options in the sidebars.")
 
 # Sidebar: file upload & options
@@ -821,6 +821,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
