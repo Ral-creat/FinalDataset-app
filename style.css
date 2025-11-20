@@ -1,17 +1,8 @@
-/* 🌸 MAIN BACKGROUND (soft pink gradient with wave animation) */
+/* 🌸 MAIN BACKGROUND (soft pink gradient) */
 .main, [data-testid="stAppViewContainer"] {
     background: linear-gradient(180deg, #ffe6f0 0%, #ffd6e8 100%);
-    background-size: 200% 200%;
-    animation: waveBackground 10s ease-in-out infinite;
     color: #333;
     font-family: "Poppins", sans-serif;
-}
-
-/* 🌊 Keyframes for smooth moving wave effect */
-@keyframes waveBackground {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
 }
 /* 🌸 NAVIGATION BAR BUTTONS (Data Upload, EDA, etc.) */
 [data-testid="stHorizontalBlock"] div button,
