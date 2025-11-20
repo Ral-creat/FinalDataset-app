@@ -23,7 +23,7 @@ from sklearn.utils import resample
 
 warnings.filterwarnings("ignore")
 
-# ================== LOAD LOCAL CSS ==================
+# ================== LOAD LOCAL CSS =================
 def local_css(file_name):
     try:
         with open(file_name) as f:
@@ -221,7 +221,7 @@ def balance_by_column(df, col, n_samples=None, method='upsample', random_state=4
 # ------------------------------
 # UI Layout
 # ------------------------------
-st.title("🌊 Flood Pattern Data Mining & Forecasting 🌊")
+st.title("🌊 BUNWAN AGUSAN DEL SUR FLOOD PATTERN REPORT 🌊")
 st.markdown("Upload a CSV/Excel (e.g. FloodDataMDRRMO.csv) — explore cleaning, EDA, clustering, prediction & forecasting. Toggle uniform/balancing options in the sidebars.")
 
 # Sidebar: file upload & options
@@ -821,6 +821,7 @@ with tabs[6]:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("App converted from Colab -> Streamlit. I added uniform/balancing options. Want SMOTE, model persistence, or downloadable reports? Say the word.")
+
 
 
 
